@@ -24,7 +24,7 @@ A student at BCREC is simultaneously managing:
 - Co-curricular activity requirements they may not fully understand
 
 **The result:**
-- A student with 73% attendance in one subject doesn't know they're 2 classes away from being ineligible for ESE — until it's too late.
+- A student at 73% attendance is already below the configured ESE threshold, but may not know how many additional classes are needed to recover.
 - A mentor gets a list of 10 students with no indication of who needs attention most, or why.
 - Faculty spend time on administrative tasks that could be automated without sacrificing accuracy.
 - Students don't know which topic to study next, so they study randomly.
@@ -130,6 +130,27 @@ connects them, derives meaning from the combination, and proactively acts.
 Observe → Understand → Detect → Plan → Assist → Verify → Replan → Escalate
 ```
 
+### 4.1 What does "Agentic" mean?
+ASPIRE is considered agentic when the system can:
+1. observe changes in student state,
+2. select appropriate tools/specialist agents,
+3. generate an action plan,
+4. request required human approval,
+5. execute permitted actions,
+6. verify outcomes,
+7. replan when the outcome differs from expectation,
+8. escalate when the system cannot safely proceed.
+
+### 4.2 Decision Authority (System of Record)
+The LLM interprets system-generated facts; it does **not** become the source of truth for numeric academic state.
+- **Academic facts** → verified institutional data (DB)
+- **Academic calculations** → deterministic rule engines
+- **Derived priorities** → deterministic priority engine
+- **AI interpretation** → LLM agents
+- **Official decisions** → authorized human
+
+*Example:* Attendance = 73% (rule engine) → Risk explanation (AI) → Leave approval (human).
+
 **This is not a chatbot.** It does not just answer questions.
 It maintains state, tracks outcomes, replans on new data, and escalates when human judgment is required.
 
@@ -151,14 +172,15 @@ Nothing in P1 or P2 is touched until all P0 items have a working vertical slice.
 | P0-05 | Unified obligation stream — one task list for student from all sources | Without this, students ignore the system |
 | P0-06 | Learning Workspace — upload docs, source-grounded Q&A, quizzes, flashcards | Existing EduGen capability, retained |
 | P0-07 | Adaptive Learning Agent — detect weak topic, build practice plan, update learning state | Differentiates from a dashboard |
-| P0-08 | Supervisor + Specialist Agent loop — event → supervisor → academic/attendance agent → plan | Core agentic behavior |
-| P0-09 | Mentor case management + priority queue — urgency-driven, evidence-backed, not a raw list | Proves the system benefits humans, not just students |
+| P0-08 | Supervisor + Specialist Agent loop — event → supervisor → academic/attendance agent → plan | Core agentic behavior (basic intervention generation + mentor approval + follow-up) |
+| P0-09 | Mentor case management + priority queue + minimal mentor web workspace — urgency-driven, evidence-backed, not a raw list | Proves the system benefits humans, not just students |
 | P0-10 | RBAC — role checks on every protected action | Non-negotiable (see Constitution S-01) |
 | P0-11 | Data provenance + audit trail — source, version, actor on every record | Non-negotiable (see Constitution D-03, S-04) |
 | P0-12 | Auth — login, session management, role assignment | Table stakes |
 | P0-13 | Institution configuration — attendance threshold, academic scheme, batch | Enables P-05 (configurable, not hard-coded) |
 | P0-14 | CSV/Excel import pipeline — for attendance, marks, enrollment, calendar data | BCREC won't have an API; this is how data enters |
-| P0-15 | Student mobile app — home, academic health, attendance, learning workspace, tasks, AI guidance | Mobile is the primary student channel |
+| P0-15 | Student mobile app (minimal vertical slice) — Login, Home, Attendance, Tasks, Learning Workspace, AI guidance, Notifications | Mobile is the primary student channel |
+| P0-16 | Evaluation & Test Harness — rule fixtures, RBAC tests, agent tool-boundary tests, RAG tests, priority queue fixtures, regression tests | Ensures vibe-coding remains stable and measurable |
 
 ---
 
@@ -167,14 +189,14 @@ Nothing in P1 or P2 is touched until all P0 items have a working vertical slice.
 | ID | Feature | Why P1 |
 |---|---|---|
 | P1-01 | Notice intelligence — fetch public BCREC pages, parse, classify, version, map to audience | High value but complex NLP pipeline |
-| P1-02 | Career intelligence — goals, skills, readiness signals, roadmap | High student value, builds on career features in EduGen |
+| P1-02 | Career intelligence — goals, skills, readiness signals, roadmap | Existing EduGen career functionality is retained. P1 integrates this with the ASPIRE Student State and task ecosystem |
 | P1-03 | Project tracking — state machine, milestones, guide assignment, evidence | Important for final-year students |
 | P1-04 | Internship tracking — milestones, certificate/report upload, verification | Paired with P1-03 |
 | P1-05 | Activity/MAR tracking — configurable rules, evidence, verification, dedup | Needed for complete student 360 |
 | P1-06 | Faculty/CT dashboards — operational views for assigned roles | Needed for real institutional adoption |
 | P1-07 | HOD analytics — department aggregates, mentor workload, case outcomes | Needed to sell to institutions |
 | P1-08 | Push notifications | Without this, mobile app engagement drops |
-| P1-09 | Intervention Agent — full case lifecycle, replan on failure, escalation | Extends P0-08 Supervisor loop |
+| P1-09 | Intervention Agent Expansion — richer autonomous case lifecycle, advanced replanning, escalation policies, longitudinal outcomes | Extends P0 basic intervention loop |
 | P1-10 | Career Agent — roadmap tasks, skill gap identification, resource suggestions | Extends P0-07 Learning Agent |
 
 ---
@@ -245,7 +267,7 @@ These are the metrics that prove ASPIRE works. "AI feels smart" is not a success
 
 - **3 people, 7 months** — P0 is the non-negotiable delivery. P1 is added only after P0 vertical slice is working end-to-end.
 - **No premature multi-tenancy** — BCREC is the only institution in v1. The architecture must be configurable for other institutions, but we do not build a multi-college admin/SaaS experience.
-- **Existing EduGen code** — Learning workspace features are reused and refactored. `CourseWorkspace.tsx` (46KB) must be broken up. No blind extension of the existing codebase.
+- **Existing EduGen code** — Learning workspace features are reused and refactored. `CourseWorkspace.tsx` (46KB) must be broken up. No blind extension of the existing codebase. Strategy: KEEP validated capabilities, REFACTOR architecture/services, REPLACE unsafe implementations, REMOVE obsolete code.
 
 ### 7.3 Institutional constraints
 
