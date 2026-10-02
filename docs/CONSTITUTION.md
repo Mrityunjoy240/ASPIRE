@@ -1,7 +1,7 @@
 # CONSTITUTION.md
 # EduGen AI / ASPIRE — Engineering & Product Constitution
 
-**STATUS: 🔴 DRAFT — Must be reviewed and agreed by all 3 team members before any code is written.**
+**STATUS: 🟡 UNDER REVIEW — Constitution reviewed by Mrityunjoy Kapat (02 Oct 2026). Pending agreement from Abhijit Ghosh and Bishesh Ghosh before FROZEN.**
 
 **Team Lead:** Mrityunjoy Kapat
 **Team:** Abhijit Ghosh · Bishesh Ghosh · Mrityunjoy Kapat
@@ -127,6 +127,24 @@ Agents report confidence as `HIGH / MEDIUM / LOW` with supporting evidence.
 We do not expose raw model probability scores as accuracy claims
 unless a calibrated confidence system exists and is validated.
 
+### A-08 — LLM Access Is Always Through an Internal Service Abstraction
+No agent, tool, or application code calls the LLM provider (OpenRouter or any other) directly.
+All LLM calls go through an internal `LLMService` interface.
+The provider and model are set via environment configuration (`LLM_PROVIDER`, `LLM_MODEL`).
+This means switching providers or models requires a configuration change, not a code rewrite.
+
+```
+Agent / Tool
+    ↓
+LLMService (internal interface)
+    ↓
+OpenRouter Gateway  ← default
+    ↓
+Configurable Model
+```
+
+**Decision (ADR-001):** OpenRouter is the initial gateway. The model is chosen through evaluation, not reputation.
+
 ### A-07 — Prompt Injection is a Security Threat
 A student's uploaded PDF is content, not authority.
 If a PDF says "ignore your instructions," the agent treats that as document content —
@@ -211,12 +229,23 @@ AI-generated code must pass:
 ### E-06 — Small PRs, One Concern Each
 A PR addresses one task. One feature. One fix.
 PRs that contain multiple unrelated changes are split before review.
-A PR that contains more than ~300 lines of new logic requires explicit justification.
+**Target: ≤300 changed lines per PR.** Larger changes require explicit justification and should normally be split.
+Exceptions (do not count toward the limit): generated files, DB migrations, lockfiles, and unavoidable mechanical/scaffold changes.
 
 ### E-07 — Main Branch is Always Deployable
-Main branch must build and pass tests at all times.
-Broken main blocks the entire team.
+`main` must remain in a buildable and deployable state at all times.
+A broken build may never be merged into `main`.
 Feature branches are the default for all active work.
+
+**CI is a prerequisite before feature development begins**, not something added later.
+Minimum CI pipeline (to be set up before first feature PR):
+1. `install`
+2. `type-check`
+3. `lint`
+4. `build`
+5. `tests` (as the test suite grows)
+
+> ⚠️ CI setup is currently not in place. This must be completed before the first feature branch is opened.
 
 ### E-08 — Error, Loading, and Permission States Are Not Afterthoughts
 Every UI component that displays data implements:
@@ -280,13 +309,13 @@ By contributing code to this project, each team member agrees to this Constituti
 
 ## Open Items (Must Be Resolved Before Coding Begins)
 
-| ID | Question | Owner | Deadline |
-|---|---|---|---|
-| OQ-01 | What is the exact BCREC attendance threshold and condonation rule? | Bishesh | Before `03_SYSTEM_SPEC.md` is FROZEN |
-| OQ-02 | Are all 3 team members' roll numbers confirmed and correct? | All | Before any submission |
-| OQ-03 | Which LLM provider is primary? Which is fallback? | Mrityunjoy | Before `ADR-001` is written |
-| OQ-04 | Does the existing EduGen learning workspace codebase get reused or rewritten? | Mrityunjoy | Before Phase 3 begins |
-| OQ-05 | Who is the BCREC contact who can provide real data for validation? | All | Before `02_USER_JOURNEYS.md` is FROZEN |
+| ID | Question | Owner | Status | Decision |
+|---|---|---|---|---|
+| OQ-01 | What is the exact BCREC attendance threshold and condonation rule? | Bishesh | ✅ RESOLVED | ESE threshold: **75%**. Condonable: **65–74.99%** (Academic Council approval required). Below 65%: **not condonable**. All values are configuration, not hardcoded constants. |
+| OQ-02 | Are all 3 team members' roll numbers confirmed and correct? | All | 🔴 OPEN | All three listed as `120308244001` in Master Book — must be verified and corrected before any submission. |
+| OQ-03 | Which LLM provider is primary? Which is fallback? | Mrityunjoy | ✅ RESOLVED | **OpenRouter** as gateway (already used in existing EduGen). Internal `LLMService` abstraction. Model chosen via evaluation. See `ADR-001`. |
+| OQ-04 | Does the existing EduGen learning workspace codebase get reused or rewritten? | Mrityunjoy | ✅ RESOLVED | **Reuse + Refactor**. Keep learning/RAG functionality. Refactor boundaries and component size (e.g. `CourseWorkspace.tsx` at 46KB is too large). Build new ASPIRE architecture around it. Do not blindly extend. |
+| OQ-05 | Who is the BCREC contact who can provide real data for validation? | All | 🔴 OPEN | Must be identified before `02_USER_JOURNEYS.md` is FROZEN. |
 
 ---
 
