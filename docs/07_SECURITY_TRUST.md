@@ -17,9 +17,16 @@
 
 - **Provider:** Supabase Auth (JWTs, managed sessions)
 - All API endpoints (except `/health`) require a valid Supabase JWT in the `Authorization: Bearer` header.
-- Token expiry: access token 1 hour, refresh token 7 days.
-- Session management is handled by Supabase. We do not build our own.
+- **JWT validation (FastAPI, asymmetric JWKS):**
+  - Signature verified against the Supabase project's JWKS — asymmetric, no shared secret. `SUPABASE_JWT_SECRET` is not used, and JWKS verification requires no Supabase API secret.
+  - `iss` (issuer) must match the Supabase project
+  - `aud` (audience) must match the expected audience of the chosen Supabase token configuration
+  - `exp` (expiration) must be in the future
+  - `sub` (subject) must be present and identifies the Supabase user
+  - `nbf` / `iat` validated where applicable to the chosen Supabase token configuration
+- **Session lifetime:** Access-token and session lifetime follow the configured Supabase Auth settings. Supabase manages the refresh/session lifecycle — ASPIRE does not independently manage token lifetime.
 - Passwords are never stored. Supabase handles credential management.
+- No server secret key is ever exposed to a frontend (Constitution S-05).
 
 ---
 
@@ -27,9 +34,18 @@
 
 RBAC is enforced at **two layers**. Both layers must agree.
 
-**Layer 1 — FastAPI middleware:** Checks the user's role claim in the JWT before the request reaches a route handler.
+**Layer 1 — FastAPI middleware:** Validates the Supabase JWT (§1 — signature, `iss`, `aud`, `exp`, `sub`, `nbf`/`iat`) to establish *who* the caller is (`sub`), then resolves the caller's ASPIRE application roles from `user_role_assignments` before the request reaches a route handler. The corresponding `users` row must exist with `status = ACTIVE`; a `SUSPENDED` user is rejected with 403 even when their role assignments are active. The JWT is never the source of truth for application roles; no custom role claims are read from the token. ASPIRE roles: Student, Faculty, CT (= `CLASS_TEACHER`), Mentor, HOD, Admin.
 
-**Layer 2 — Supabase Row Level Security (RLS):** Database policies enforce that even if Layer 1 is bypassed, a query cannot return data the user is not authorized to see.
+**Layer 2 — Supabase Row Level Security (RLS):** Database policies protect non-privileged client/data-access paths that operate under the appropriate Supabase/Postgres roles.
+
+**v1 strategy — FastAPI DB access + application authorization + RLS (explicit):**
+- FastAPI connects to PostgreSQL with a **server-side service connection that carries no JWT context**. `auth.uid()` is NULL for these sessions; a user's Supabase token never propagates to the database automatically.
+- **FastAPI requests:** authenticated by the Supabase JWT (§1); authorized by ASPIRE application roles (`user_role_assignments`) and explicit query scoping, executed through the server-side DB connection. Application authorization in FastAPI is mandatory and **authoritative for FastAPI requests**.
+- **Every protected database operation must satisfy (DM-NEW-ORM01):** (1) authenticated identity, (2) ASPIRE role authorization, (3) explicit row/scope filtering, (4) audit/provenance where required. A SQLAlchemy query executing successfully is **not** evidence of authorization — the service connection carries no JWT/`auth.uid()` context. Example: Mentor access → verify MENTOR role → verify mentee assignment → query only assigned mentees.
+- **RLS:** protects non-privileged client/data-access paths that operate under the appropriate Supabase/Postgres roles.
+- **Privileged administrative paths** such as Supabase Studio are outside the end-user RLS authorization boundary and are protected by institutional/admin access controls.
+- The service connection credential is server-side only — never shipped to a frontend, never present in a browser, never used by agents.
+- Agents hold no DB credentials at all; they call typed FastAPI tool endpoints (`04_ARCHITECTURE.md` §4).
 
 **RLS policies (examples):**
 ```sql

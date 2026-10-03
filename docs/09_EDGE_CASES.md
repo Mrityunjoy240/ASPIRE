@@ -68,8 +68,8 @@
 
 | ID | Scenario | Expected Behavior |
 |---|---|---|
-| EC-USR-01 | A user's role is changed from Faculty to Student | Their old Faculty JWT is immediately invalid for Faculty-scoped endpoints. They must log in again. |
-| EC-USR-02 | A mentor is also a student at the same institution | They have two separate user records. The system enforces role-based data visibility separately for each session/role. |
+| EC-USR-01 | A user's role is changed from Faculty to Student | The JWT establishes identity only; ASPIRE roles are resolved from `user_role_assignments`. The role-assignment change takes effect on the next authenticated API request. No new login is required solely because the ASPIRE role assignment changed. |
+| EC-USR-02 | A mentor is also a student at the same institution | One Supabase user, one `users` row. Multiple ASPIRE roles live in `user_role_assignments` as multiple active assignments; visibility is enforced per request from the resolved assignments. Never create separate user records for the same human because they hold multiple roles. |
 | EC-USR-03 | A student's mentor is reassigned mid-semester | Old mentor loses access to the student's cases. New mentor receives the case queue. Existing open cases are transferred. |
 | EC-USR-04 | A student tries to access the Mentor web interface | 403. Role check in FastAPI middleware blocks access before any data is read. |
 | EC-USR-05 | Unauthenticated request to any API endpoint | 401. Supabase JWT verification fails at middleware. |

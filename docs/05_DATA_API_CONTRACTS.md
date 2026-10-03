@@ -46,7 +46,6 @@ id               UUID PRIMARY KEY            -- mirrors Supabase Auth user id
 institution_id   UUID REFERENCES institutions(id)
 email            TEXT UNIQUE NOT NULL
 full_name        TEXT NOT NULL
-role             user_role NOT NULL          -- ENUM (see below)
 status           TEXT DEFAULT 'ACTIVE'       -- ACTIVE | SUSPENDED
 created_at       TIMESTAMPTZ
 updated_at       TIMESTAMPTZ
@@ -54,6 +53,22 @@ updated_at       TIMESTAMPTZ
 
 **Enum: `user_role`**
 `STUDENT | FACULTY | CLASS_TEACHER | MENTOR | HOD | ADMIN`
+
+**Role resolution (FINAL):** `user_role_assignments` (below) is the **sole source of truth** for ASPIRE application roles. A user may hold multiple active role assignments. JWT role claims are never used, and there is no second authorization source on `users`.
+
+### `user_role_assignments`
+```sql
+id                UUID PRIMARY KEY            -- surrogate PK (DM-AUTH03)
+user_id           UUID REFERENCES users(id)
+institution_id    UUID REFERENCES institutions(id)
+role              user_role NOT NULL
+scope_entity_type TEXT                       -- optional scope type; NULL = institution-wide
+scope_entity_id   UUID                       -- optional scope id
+valid_from        TIMESTAMPTZ
+valid_to          TIMESTAMPTZ                -- NULL = open-ended
+assigned_by       UUID REFERENCES users(id)
+created_at        TIMESTAMPTZ
+```
 
 ---
 

@@ -22,8 +22,8 @@
 │                                                                              │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────────────┐  │
 │  │   MOBILE APP    │    │    WEB APP       │    │  ADMIN / STAFF WEB      │  │
-│  │  React Native   │    │   Next.js 15     │    │     Next.js 15          │  │
-│  │  + Expo         │    │  (App Router)    │    │     (App Router)        │  │
+│  │  Next.js 15     │    │   Next.js 15     │    │     Next.js 15          │  │
+│  │  PWA            │    │  (App Router)    │    │     (App Router)        │  │
 │  │                 │    │                  │    │                         │  │
 │  │  Primary:       │    │  Primary:        │    │  Primary:               │  │
 │  │  Student        │    │  Student (web)   │    │  Faculty/CT/Mentor      │  │
@@ -68,7 +68,7 @@
 
 | Service | Language / Framework | Owner | Description |
 |---|---|---|---|
-| Mobile App | React Native + Expo | Mrityunjoy | Student-primary mobile experience |
+| Mobile App | Next.js 15 (installable PWA) | Mrityunjoy | Student-primary mobile experience (PWA only in P0) |
 | Web App | Next.js 15 (App Router) | Abhijit | Student web + faculty/CT/admin workspace |
 | API Gateway | Python + FastAPI | Bishesh | Single entry point. Auth, RBAC, routing |
 | Rule Engines | Python (pure, no I/O) | Bishesh | Attendance, assessment, priority engines |
@@ -136,6 +136,8 @@ Tracing the "Student S-204 at risk" scenario through the full stack.
 ## 4. Service Communication Rules
 
 - **Frontend → API:** HTTPS REST only. All requests carry a JWT (Supabase Auth token).
+- **Authentication:** Supabase Auth only. FastAPI validates the incoming Supabase JWT asymmetrically (JWKS: signature, iss, aud, exp, sub, nbf/iat) to establish caller identity, then resolves ASPIRE roles from `user_role_assignments`. The application never stores passwords and never issues its own tokens.
+- **API → Database:** FastAPI uses a server-side service connection that carries **no JWT/`auth.uid()` context**. Application authorization (`require_role` + explicit query scoping) is mandatory and authoritative for FastAPI requests; RLS protects non-privileged client/data-access paths (`07_SECURITY_TRUST.md` §2 v1 strategy). A successful SQLAlchemy query is **not** authorization: every protected database operation requires (1) authenticated identity, (2) ASPIRE role authorization, (3) explicit row/scope filtering, (4) audit/provenance where required (DM-NEW-ORM01 — `07_SECURITY_TRUST.md` §2).
 - **API → Rule Engines:** Direct in-process function calls. Rule engines are pure Python modules, not microservices. No HTTP between them.
 - **API → Agent Orchestrator:** Direct in-process call in v1. (Can be extracted to a queue later).
 - **Agents → Database:** Agents NEVER call Supabase/PostgreSQL directly. They call typed FastAPI tool endpoints which enforce RBAC.
@@ -150,11 +152,15 @@ Tracing the "Student S-204 at risk" scenario through the full stack.
 |---|---|---|
 | LLM Gateway | OpenRouter | Already used in EduGen. Provider-agnostic. |
 | Agent Framework | LangGraph | Supports stateful, cyclical agent graphs. Fits the Observe→Replan loop. |
-| Database | PostgreSQL (Supabase) | pgvector support. Auth included. RLS for RBAC. |
+| Database | PostgreSQL (Supabase) | pgvector support. Supabase Auth; RLS covers non-privileged data-access paths (07 §2). |
 | Embeddings | BGE-M3 (1024-dim) | Multilingual, strong retrieval. Swappable via config. |
-| Mobile | React Native + Expo | Cross-platform. Expo Router for navigation. |
+| Mobile | Next.js 15 (installable PWA) | One codebase with web. No React Native/Expo in P0. |
 | Web | Next.js 15 App Router | Server components. TypeScript native. Vercel deploy. |
 | API | FastAPI | Async. Auto-generated OpenAPI docs. Python for ML interop. |
+| Python tooling | uv + root `pyproject.toml` + `uv.lock` | Fast, reproducible Python envs. Single package in v1 — no uv workspace. |
+| **DM-NEW-ORM01 — ORM / DB access = ✅ DECIDED** | SQLAlchemy 2.x (async) + psycopg 3 + repository/service layer | SQL migrations in `db/migrations/` are the **authoritative schema source**; SQLAlchemy models mirror `05_DATA_API_CONTRACTS.md` for runtime access only (never a competing schema source). **Prisma removed.** No Alembic as a second schema/migration authority. Exact versions pinned via `uv.lock`. |
+
+> The production LLM model is **not frozen** until evaluation selects one. Development and CI must support **mock/disabled LLM** operation (`LLM_PROVIDER=mock`) so the platform runs without an LLM key.
 
 ---
 
@@ -170,13 +176,15 @@ ASPIRE/
 │   │   │   ├── (faculty)/      ← Faculty dashboard (P1)
 │   │   │   └── (admin)/        ← Admin config panel
 │   │   └── components/
-│   └── mobile/                 ← React Native + Expo (Mrityunjoy owns)
-│       ├── app/                ← Expo Router
+│   └── mobile/                 ← Next.js 15 installable PWA (Mrityunjoy owns)
+│       ├── app/                ← App Router (mobile-first)
 │       └── components/
 ├── services/
 │   ├── api/                    ← FastAPI (Bishesh owns)
 │   │   ├── routers/
 │   │   ├── middleware/
+│   │   ├── db/                 ← SQLAlchemy 2.x async engine/session + models (mirror 05 — DM-NEW-ORM01)
+│   │   ├── repositories/       ← Repository/service layer (DM-NEW-ORM01)
 │   │   └── main.py
 │   ├── engines/                ← Pure Python rule engines (Bishesh owns)
 │   │   ├── attendance.py
@@ -193,10 +201,13 @@ ASPIRE/
 │   └── ingestion/              ← CSV/Excel import pipeline (Bishesh owns)
 │       └── importer.py
 ├── packages/
-│   ├── schemas/                ← Shared TypeScript types + Zod schemas
+│   ├── schemas/                ← Shared TS types + Zod schemas (frontend)
+│   │                             Backend mirrors via Pydantic — compat via OpenAPI + tests
 │   └── ui/                     ← Shared component library
+├── pyproject.toml              ← Python project config (uv) — single package, no uv workspace
+├── uv.lock                     ← Locked Python dependencies
 ├── db/
-│   ├── migrations/             ← Supabase migrations (Bishesh owns)
+│   ├── migrations/             ← Supabase SQL migrations — AUTHORITATIVE schema source (Bishesh owns)
 │   └── seeds/                  ← BCREC seed data for dev/testing
 ├── evals/                      ← Evaluation harness (P0-16)
 └── tests/
@@ -228,6 +239,6 @@ ASPIRE/
 
 | ID | Question | Owner | Status |
 |---|---|---|---|
-| OQ-A01 | Should the API and Agents run as a single FastAPI process in v1 or separate services? | Mrityunjoy + Bishesh | 🔴 OPEN — decide before `10_TASKS.md` |
-| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | 🔴 OPEN — blocks onboarding |
-| OQ-A03 | Shared `packages/schemas` — TypeScript only or Python Pydantic models too? | All | 🔴 OPEN |
+| OQ-A01 | Should the API and Agents run as a single FastAPI process in v1 or separate services? | Mrityunjoy + Bishesh | ✅ RESOLVED — Single FastAPI application/process in v1 (Team Lead decision, 03 Oct 2026) |
+| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | ✅ RESOLVED — Docker Compose for local DB/infra; Next.js and FastAPI run natively in dev (Team Lead decision, 03 Oct 2026) |
+| OQ-A03 | Shared `packages/schemas` — TypeScript only or Python Pydantic models too? | All | ✅ RESOLVED — TypeScript Zod for frontend, Python Pydantic for backend; compatibility via OpenAPI contract + tests (Team Lead decision, 03 Oct 2026) |

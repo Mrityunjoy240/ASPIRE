@@ -1,114 +1,129 @@
+# README.md
 # EduGen AI — ASPIRE
-### An Agentic Student Progress, Intelligence and Resource Engine for Higher Education
 
-**Team Lead:** Mrityunjoy Kapat
-**Team:** Abhijit Ghosh · Bishesh Ghosh · Mrityunjoy Kapat
-**Reference Institution:** Dr. B. C. Roy Engineering College (BCREC), Durgapur
-**Version:** 1.0 — 02 October 2026
+**An Agentic Student Progress, Intelligence and Resource Engine for Higher Education**
+
+**Reference Institution:** Dr. B.C. Roy Engineering College (BCREC), Durgapur
+**Team:** Mrityunjoy Kapat · Abhijit Ghosh · Bishesh Ghosh
+**Status:** Active Development — Phase 0 (Spec + Foundation)
 
 ---
 
 ## What is ASPIRE?
 
-ASPIRE is a student-first academic intelligence and agentic assistance platform.
-It maintains a validated view of a student's academic state, detects actionable issues,
-plans personalized next steps, tracks follow-through, verifies outcomes,
-and routes unresolved cases to the appropriate human mentor or academic staff.
+ASPIRE is an agentic academic intelligence platform that connects fragmented student data (attendance, assessments, deadlines, learning materials) into a single proactive system that detects problems early, proposes evidence-backed recovery plans, routes them through mentor approval, and verifies outcomes.
 
-**Core loop:** `Observe → Understand → Detect → Plan → Assist → Verify → Replan → Escalate`
+**It is not a chatbot. It is not a dashboard. It is a closed-loop intervention system.**
 
----
-
-## Repository Structure
-
+The system behavior:
 ```
-ASPIRE/
-├── docs/
-│   ├── CONSTITUTION.md          ← Start here. Non-negotiable engineering principles.
-│   ├── 01_PRD.md                ← What we build, who it's for, why.
-│   ├── 02_USER_JOURNEYS.md      ← What every user actually does.
-│   ├── 03_SYSTEM_SPEC.md        ← Functional contracts for every module.
-│   ├── 04_ARCHITECTURE.md       ← System boundaries and agent model.
-│   ├── 05_DATA_API_CONTRACTS.md ← Entities, schema, API endpoints.
-│   ├── 06_AGENT_SPEC.md         ← Agent contracts and tool boundaries.
-│   ├── 07_SECURITY_TRUST.md     ← RBAC, privacy, audit.
-│   ├── 08_EVALS.md              ← How we prove the system works.
-│   ├── 09_EDGE_CASES.md         ← Adversarial test catalogue.
-│   ├── 10_TASKS.md              ← Implementation tasks (after all above are FROZEN).
-│   └── decisions/
-│       └── ADR-XXX.md           ← Architecture Decision Records.
-├── apps/
-│   ├── web/                     ← Next.js 15 web app
-│   └── mobile/                  ← React Native + Expo
-├── services/
-│   ├── api/                     ← FastAPI backend
-│   ├── agents/                  ← LangGraph agent orchestration
-│   ├── rules/                   ← Deterministic rule engines
-│   ├── ingestion/               ← CSV/Excel import + notice crawling
-│   └── notifications/           ← Push + in-app notifications
-├── packages/
-│   ├── schemas/                 ← Shared TypeScript types + Zod schemas
-│   ├── ui/                      ← Shared component library
-│   └── config/                  ← Institution configuration
-├── db/
-│   ├── migrations/
-│   ├── seeds/
-│   └── fixtures/
-├── evals/
-├── tests/
-├── design/
-│   └── design-system.md
-├── AGENTS.md                    ← Rules for AI coding agents
-└── README.md
+Observe → Understand → Detect → Plan → Assist → Verify → Replan → Escalate
 ```
 
 ---
 
-## Pre-Coding Status
+## The Demo Story (P0 North Star)
 
-> **NO CODE IS WRITTEN UNTIL ALL RELEVANT SPEC SECTIONS ARE FROZEN.**
+> Student S-204, DBMS attendance at 73%, exam in 8 days, assessment trend declining.
+> ASPIRE detects the risk, proposes a recovery plan, routes it to the mentor, the student accepts,
+> completes a targeted quiz from their own uploaded notes, and the case closes when attendance recovers.
 
-| Document | Status |
-|---|---|
-| `CONSTITUTION.md` | 🔴 DRAFT |
-| `01_PRD.md` | ⬜ Not started |
-| `02_USER_JOURNEYS.md` | ⬜ Not started |
-| `03_SYSTEM_SPEC.md` | ⬜ Not started |
-| `04_ARCHITECTURE.md` | ⬜ Not started |
-| `05_DATA_API_CONTRACTS.md` | ⬜ Not started |
-| `06_AGENT_SPEC.md` | ⬜ Not started |
-| `07_SECURITY_TRUST.md` | ⬜ Not started |
-| `08_EVALS.md` | ⬜ Not started |
-| `09_EDGE_CASES.md` | ⬜ Not started |
-| `10_TASKS.md` | ⬜ Not started |
+**If this flow works cleanly, the product has a story.**
 
 ---
 
-## Tech Stack
+## ⚠️ Read Before You Touch Anything
+
+1. **Read [`AGENTS.md`](./AGENTS.md)** — if you are an AI agent (OpenCode, Antigravity), start here.
+2. **Read [`docs/CONSTITUTION.md`](./docs/CONSTITUTION.md)** — the non-negotiable engineering rules.
+3. **Read [`docs/10_TASKS.md`](./docs/10_TASKS.md)** — pick your task from here, not from your imagination.
+4. **No application code is written without a task ID from `10_TASKS.md`.**
+
+---
+
+## Technology Stack
 
 | Layer | Technology |
 |---|---|
-| Web Frontend | Next.js 15 (App Router) + TypeScript + Tailwind CSS |
-| Mobile | React Native + Expo |
-| Backend API | Python + FastAPI |
-| Agent Orchestration | LangGraph |
-| Database | PostgreSQL (Supabase) + pgvector |
-| Auth | Supabase Auth |
-| Push Notifications | Firebase Cloud Messaging |
-| LLM | Provider-agnostic (ADR-001) |
-| Embeddings | BGE-M3 (swappable) |
-| Hosting | Vercel (web) + managed API |
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript (strict) |
+| Styling | Tailwind CSS |
+| Database | PostgreSQL + pgvector |
+| ORM | SQLAlchemy |
+| LLM Gateway | OpenRouter (via internal `LLMService`) |
+| Testing | Vitest |
+| CI | GitHub Actions |
+
+---
+
+## Monorepo Structure
+
+```
+apps/web/        ← Mentor, admin, faculty web workspace (Next.js 15)
+apps/mobile/     ← Student mobile app (Next.js 15 PWA)
+packages/
+  database/      ← db/migrations (SQL schema) + services/api/db (SQLAlchemy); seeds in db/seeds/
+  shared/        ← Engines, agents, LLMService, audit (shared TypeScript)
+docs/            ← All spec documents (source of truth)
+```
+
+See [`docs/04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) for the full architecture.
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone
+git clone https://github.com/Mrityunjoy240/ASPIRE.git
+cd ASPIRE
+
+# 2. Install
+npm install
+
+# 3. Setup environment
+cp .env.example .env
+# Fill in your DATABASE_URL, LLM_API_KEY, Supabase config (key names TBD), etc.
+
+# 4. Database setup
+# apply SQL migrations (db/migrations/*.sql) to the local database
+# apply SQL seeds (db/seeds/*.sql)
+
+# 5. Run
+npm run dev --workspace=apps/web      # Web app: http://localhost:3000
+npm run dev --workspace=apps/mobile   # Mobile app: http://localhost:3001
+```
+
+---
+
+## Documentation Index
+
+| Doc | Purpose | Status |
+|---|---|---|
+| [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
+| [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🔴 DRAFT |
+| [`02_USER_JOURNEYS.md`](./docs/02_USER_JOURNEYS.md) | Exact step-by-step flows for every user type | 🟡 UNDER REVIEW |
+| [`03_SYSTEM_SPEC.md`](./docs/03_SYSTEM_SPEC.md) | Deterministic engines — math, state machines, logic | 🟡 UNDER REVIEW |
+| [`04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) | Tech stack, monorepo layout, data flow, API design | 🔴 DRAFT |
+| [`05_DATA_API_CONTRACTS.md`](./docs/05_DATA_API_CONTRACTS.md) | PostgreSQL schema + API endpoint shapes | 🔴 DRAFT |
+| [`06_AGENT_SPEC.md`](./docs/06_AGENT_SPEC.md) | Every agent's purpose, tools, boundaries, output schema | 🔴 DRAFT |
+| [`07_SECURITY_TRUST.md`](./docs/07_SECURITY_TRUST.md) | Threat model, RBAC matrix, audit requirements | 🔴 DRAFT |
+| [`08_EVALS.md`](./docs/08_EVALS.md) | Test fixtures, eval scenarios, pass/fail criteria | 🔴 DRAFT |
+| [`09_EDGE_CASES.md`](./docs/09_EDGE_CASES.md) | Edge cases for data, agents, ingestion, UI | 🔴 DRAFT |
+| [`10_TASKS.md`](./docs/10_TASKS.md) | Task queue with OpenCode prompts — the build order | 🔴 DRAFT |
+| [`AGENTS.md`](./AGENTS.md) | Quick-reference guide for AI coding agents | 🔴 DRAFT |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | How the team works, branch strategy, PR rules | 🔴 DRAFT |
 
 ---
 
 ## Team
 
-| Member | Primary Role |
-|---|---|
-| Mrityunjoy Kapat | Team Lead · Agentic AI · Integration · Mobile |
-| Abhijit Ghosh | Product · System Architecture · Web UX |
-| Bishesh Ghosh | Backend · Database · Data Ingestion · API |
+| Member | Role | Domain |
+|---|---|---|
+| **Mrityunjoy Kapat** | Team Lead | Agentic AI, Supervisor, LLMService, Integration, Evaluation |
+| **Abhijit Ghosh** | Product / UX / Frontend | Figma, Design System, Student App, Mentor Web UI |
+| **Bishesh Ghosh** | Backend / Database / Data | PostgreSQL, Student State, Data Ingestion, Rule Engines, API |
 
 ---
 
-*Read `docs/CONSTITUTION.md` before contributing anything.*
+*EduGen AI / ASPIRE — Built for BCREC. Designed for every college.*
