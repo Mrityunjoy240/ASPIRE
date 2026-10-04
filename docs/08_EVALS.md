@@ -39,6 +39,7 @@ These fixtures must all pass before `services/engines/attendance.py` is merged.
 | ATT-05 | attended=22, conducted=30, target=75 | required_to_recover=4 |
 | ATT-06 | attended=30, conducted=30, target=75 | required_to_recover=0 (already met) |
 | ATT-07 | attended=0, conducted=30, target=75 | required_to_recover=-1 (mathematically unreachable within max_classes) |
+| ATT-08 | Source (CSV import or manual entry) supplies attendance status = `LATE` | Validation MUST fail and the record is rejected — never becomes VERIFIED, never silently coerced to PRESENT or ABSENT; engine never generates `LATE` (DM-NEW-LATE01 Option C — reserved/unsupported input in v1) |
 
 ---
 

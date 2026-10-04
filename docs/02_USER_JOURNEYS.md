@@ -182,11 +182,18 @@ Step 4 — Student decides: nothing urgent → close app.
 
 **Case state machine (relevant to all mentor journeys):**
 ```
-OPEN → IN_REVIEW → APPROVED → ACTIVE → MONITORING
-                → REPLAN_REQUIRED → (back to IN_REVIEW)
-                → ESCALATION_REQUIRED → (HOD/CT action)
-                → RESOLVED → CLOSED
+OPEN
+→ IN_REVIEW
+→ PLAN_PROPOSED
+→ PENDING_APPROVAL
+→ ACTIVE
+→ MONITORING
+→ REPLAN_REQUIRED
+→ ESCALATION_REQUIRED
+→ RESOLVED
+→ CLOSED
 ```
+(Exact frozen lifecycle — `03_SYSTEM_SPEC.md` §10.2. `REPLAN_REQUIRED` returns to `IN_REVIEW`; `ESCALATION_REQUIRED` awaits HOD/CT action.)
 
 ```
 Step 1 — Mentor logs into Web Workspace → opens Priority Queue.
@@ -219,14 +226,14 @@ Step 4 — Mentor reviews the AI-proposed plan.
 
 Step 5 — Mentor decision (three paths):
   [Approve Plan]
-    → case moves to APPROVED → ACTIVE
+    → case moves to ACTIVE (mentor approval — `PENDING_APPROVAL → ACTIVE`, 03 §10.2)
     → student receives confirmation notification
     → follow-up scheduled per intervention policy (see below)
 
   [Edit & Approve]
     → mentor modifies the plan (e.g., adds required 1:1 meeting)
     → edited plan saved with actor + timestamp
-    → case moves to APPROVED → ACTIVE
+    → case moves to ACTIVE (mentor edits + approves — `PENDING_APPROVAL → ACTIVE`, 03 §10.2)
     → student sees the revised plan with mentor's additions
 
   [Reject → Replan Required]

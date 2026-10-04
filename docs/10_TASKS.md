@@ -496,11 +496,11 @@ Rules:
 ---
 
 ### T-012 — OpenAPI Contract Generation + CI Drift Guard
-**Status:** 🔒 BLOCKED on T-011
+**Status:** 🔒 BLOCKED on T-011, T-001
 **PRD Ref:** P0-16 (API contract + drift guard)
 **Spec Ref:** 04_ARCHITECTURE.md §4/§5 (DM-API01), 05_DATA_API_CONTRACTS.md intro (DM-API01), 08_EVALS.md Section 12
 **Branch:** `feature/T-012-openapi-contract`
-**Depends on:** T-011 ✅
+**Depends on:** T-011 ✅, T-001 ✅
 
 **What gets built:**
 - Deterministic contract generation script (`scripts/generate_openapi.py`) that imports the FastAPI app (no production infrastructure), generates the OpenAPI document, and writes the canonical artifact `contracts/openapi.json`
@@ -881,7 +881,7 @@ Rules:
 
 **What gets built:**
 - SQL migration + SQLAlchemy mirror model for `audit_log` (05 — authoritative — DM-NEW-ORM01)
-- `SystemActors` table (GAP-06 resolution — **BLOCKED**: contract gap, see AC)
+- `system_actors` table (**BLOCKED**: contract gap — `system_actors` is missing from 05, see AC)
 - `emitAuditEvent()` utility function
 
 **Acceptance Criteria:**
@@ -1220,7 +1220,7 @@ Rules:
 ### T-061 — Mentor Priority Queue API
 **Status:** 🔒 BLOCKED on T-060, T-011; OQ-SS03 resolved — DM-SS03 (Option A: frozen in 03 §6.2)
 **PRD Ref:** P0-09
-**Spec Ref:** 03_SYSTEM_SPEC.md Section 6, 05_DATA_API_CONTRACTS.md Section 13 — MENTOR QUEUE
+**Spec Ref:** 03_SYSTEM_SPEC.md Section 6 / §6.2 (DM-SS03), 08_EVALS.md Section 9, 02_USER_JOURNEYS.md Section 2.1 (queue card display)
 **Branch:** `feature/T-061-mentor-queue-api`
 **Depends on:** T-060 ✅, T-011 ✅
 
@@ -1241,8 +1241,8 @@ Rules:
 Build the Mentor Priority Queue API for ASPIRE.
 
 Reference:
-- docs/03_SYSTEM_SPEC.md Section 6
-- docs/05_DATA_API_CONTRACTS.md Section 13 — MENTOR QUEUE
+- docs/03_SYSTEM_SPEC.md Section 6.2 (queue ordering — DM-SS03 frozen; authoritative)
+- docs/08_EVALS.md Section 9 (PQ fixtures)
 
 PART 1 — Create apps/web/app/api/v1/mentors/[mentorId]/queue/route.ts:
 GET handler:
@@ -1257,7 +1257,7 @@ GET handler:
   3. days_since_last_mentor_action DESC (NULLS FIRST — never acted on)
   4. final tie-breakers: createdAt ASC, then caseId ASC
   (ATTENTION/MONITOR skip step 2 — no exam proximity outside URGENT.)
-- Return array matching the queue card shape from docs/05_DATA_API_CONTRACTS.md Section 13.
+- Return queue cards ordered strictly per docs/03_SYSTEM_SPEC.md Section 6.2 (above); card display fields follow the queue card in docs/02_USER_JOURNEYS.md Section 2.1; verify against docs/08_EVALS.md Section 9 fixtures. (05 §13 does NOT define queue-card shape — it is the API boundary table only.)
 
 PART 2 — Create apps/web/app/api/v1/cases/[caseId]/mentor-action/route.ts:
 PATCH handler:

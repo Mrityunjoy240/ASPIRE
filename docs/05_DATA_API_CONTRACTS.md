@@ -392,6 +392,7 @@ All writes go through the typed API layer.
 | `/students/{id}/tasks` | Student (own), Mentor | System Agent, Mentor | Student (own) | — |
 | `/students/{id}/cases` | Student (own), Mentor | Rule Engine | Mentor | — |
 | `/cases/{id}/plans` | Student, Mentor | System Agent | Student, Mentor | — |
+| `/cases` | Mentor (assigned mentees), HOD | — | — | — |
 | `/institution-rules` | Admin | Admin | Admin | — |
 | `/import/upload` | Admin | Admin | — | — |
 | `/documents` | Scoped by access_scope | Student, Faculty | — | — |
