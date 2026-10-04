@@ -100,6 +100,12 @@ npm run dev --workspace=apps/web      # Web app: http://localhost:3000
 npm run dev --workspace=apps/mobile   # Mobile app: http://localhost:3001
 ```
 
+Regenerate the API contract (DM-API01 — FastAPI/Pydantic is source of truth; the committed `contracts/openapi.json` is generated, never hand-edited; CI fails on drift):
+
+```bash
+uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
+```
+
 ---
 
 ## Documentation Index

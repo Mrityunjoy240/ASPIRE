@@ -153,6 +153,7 @@ periodic scheduler
 ```
 
 - **Local development topology (Supabase local-dev strategy — FROZEN):** Next.js and FastAPI run **natively** as development processes. The **Supabase CLI local stack** provides Postgres, Auth, Storage, Data API (PostgREST), and Studio (container runtime underneath). Do **not** create a second custom Supabase Docker Compose stack. **Migration authority:** `db/migrations/*.sql` remains the ONLY authoritative ASPIRE schema source, applied to the CLI's local Postgres by an ASPIRE-controlled migration runner with deterministic ordering — no second `supabase/migrations/*.sql` authority tree, and `supabase db reset` (which replays `supabase/migrations`) is NOT the authoritative migration mechanism.
+- **API contract (DM-API01 — FROZEN):** **FastAPI route definitions + Pydantic request/response models are the source of truth.** FastAPI generates the OpenAPI document from them; the committed generated artifact **`contracts/openapi.json`** is the reviewable API contract consumed by the TypeScript frontend toolchain. Authority hierarchy: `FastAPI routes + Pydantic → generated openapi.json → frontend generated TypeScript types`. **No developer may manually edit `openapi.json`**; no duplicate OpenAPI JSON/YAML contract files exist anywhere. CI regenerates the document and **FAILS if it differs** from the committed artifact (drift guard). Runtime `/openapi.json` MAY remain enabled and comes from the same app definition — never a handwritten runtime document. The OpenAPI version is whatever the pinned FastAPI/Pydantic toolchain emits. Generated TS types are compile-time contract types; frontend runtime validation stays on Zod (OQ-A03).
 
 ---
 
@@ -169,6 +170,7 @@ periodic scheduler
 | API | FastAPI | Async. Auto-generated OpenAPI docs. Python for ML interop. |
 | Python tooling | uv + root `pyproject.toml` + `uv.lock` | Fast, reproducible Python envs. Single package in v1 — no uv workspace. |
 | **DM-NEW-ORM01 — ORM / DB access = ✅ DECIDED** | SQLAlchemy 2.x (async) + psycopg 3 + repository/service layer | SQL migrations in `db/migrations/` are the **authoritative schema source**; SQLAlchemy models mirror `05_DATA_API_CONTRACTS.md` for runtime access only (never a competing schema source). **Prisma removed.** No Alembic as a second schema/migration authority. Exact versions pinned via `uv.lock`. |
+| **DM-API01 — API contract = ✅ DECIDED** | FastAPI routes + Pydantic → generated `contracts/openapi.json` → TS types | Single canonical committed artifact; no manual edits; no duplicate contract files; CI fails on drift. |
 
 > The production LLM model is **not frozen** until evaluation selects one. Development and CI must support **mock/disabled LLM** operation (`LLM_PROVIDER=mock`) so the platform runs without an LLM key.
 
@@ -212,10 +214,12 @@ ASPIRE/
 │       └── importer.py
 ├── packages/
 │   ├── schemas/                ← Shared TS types + Zod schemas (frontend)
-│   │                             Backend mirrors via Pydantic — compat via OpenAPI + tests
+│   │                             Backend mirrors via Pydantic — compat via generated contracts/openapi.json + tests (DM-API01)
 │   └── ui/                     ← Shared component library
 ├── pyproject.toml              ← Python project config (uv) — single package, no uv workspace
 ├── uv.lock                     ← Locked Python dependencies
+├── contracts/
+│   └── openapi.json            ← Generated API contract artifact — DO NOT hand-edit (DM-API01)
 ├── db/
 │   ├── migrations/             ← ASPIRE SQL migrations — AUTHORITATIVE schema source (Bishesh owns); applied to the Supabase CLI local Postgres via an ASPIRE-controlled runner
 │   └── seeds/                  ← BCREC seed data for dev/testing

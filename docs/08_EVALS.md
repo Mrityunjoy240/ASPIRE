@@ -193,3 +193,16 @@ The time-based scheduler (periodic, every 5 minutes — 03_SYSTEM_SPEC §8.3) mu
 | SCH-05 | Task with status=COMPLETED, deadline in the past | No `TASK_OVERDUE` emitted |
 | SCH-06 | Task with status=PENDING, deadline=NULL | `TASK_OVERDUE` never emitted |
 | SCH-07 | After `TASK_OVERDUE` emission | DB status remains PENDING — `OVERDUE` is never persisted (DM-SS02) |
+
+---
+
+## 12. OpenAPI Contract Fixtures (DM-API01)
+
+`contracts/openapi.json` is the committed **generated** contract artifact (FastAPI routes + Pydantic = source of truth). These fixtures must pass before any API change is merged.
+
+| ID | Check | Expected Output |
+|---|---|---|
+| API-01 | Run the contract generation command twice from a clean app import | Deterministic, byte-identical output (stable key ordering and formatting — git-diff safe) |
+| API-02 | Regenerate and compare against committed `contracts/openapi.json` | Zero difference — committed artifact matches generated output |
+| API-03 | CI regenerates the document while the committed artifact has been modified | CI FAIL (drift detected) |
+| API-04 | Frontend type generation | TypeScript types derive from the canonical `contracts/openapi.json` only — never hand-written endpoint schemas |

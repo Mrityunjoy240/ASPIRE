@@ -113,6 +113,7 @@ Verify: 'npm run build' must pass with zero TypeScript errors.
 **Acceptance Criteria:**
 - [ ] `.github/workflows/ci.yml` runs on every PR to `main`
 - [ ] CI is structured so the full integration/security stage (Supabase CLI local stack → apply `db/migrations` → Auth/JWKS/RLS integration tests) can be added when those tests exist; a plain PostgreSQL container may serve fast isolated/unit tests only — never a substitute for Supabase integration testing (frozen Supabase local-dev strategy)
+- [ ] CI is structured for the API contract drift guard (frozen DM-API01): regeneration of the OpenAPI document compared against committed `contracts/openapi.json`, failing CI on any difference (implementation: T-012)
 - [ ] Pipeline runs: install, type-check, lint, build
 - [ ] A failing type error causes the pipeline to fail
 - [ ] A passing build merges cleanly
@@ -398,6 +399,69 @@ Rules:
   concrete privileged requirement. Never expose server secrets to a frontend.
 - Constitution S-01: require_role must guard every protected route. S-05: no secrets.
 - Python type hints; typed JSON errors; no untyped request state.
+```
+
+---
+
+### T-012 — OpenAPI Contract Generation + CI Drift Guard
+**Status:** 🔒 BLOCKED on T-011
+**PRD Ref:** P0-16 (API contract + drift guard)
+**Spec Ref:** 04_ARCHITECTURE.md §4/§5 (DM-API01), 05_DATA_API_CONTRACTS.md intro (DM-API01), 08_EVALS.md Section 12
+**Branch:** `feature/openapi-contract`
+**Depends on:** T-011 ✅
+
+**What gets built:**
+- Deterministic contract generation script (`scripts/generate_openapi.py`) that imports the FastAPI app (no production infrastructure), generates the OpenAPI document, and writes the canonical artifact `contracts/openapi.json`
+- The committed generated artifact + frontend type generation wired to consume it
+- CI drift check: regenerate and diff against committed `contracts/openapi.json` — fail on any difference
+
+**Acceptance Criteria:**
+- [ ] `uv run python scripts/generate_openapi.py` starts/imports the FastAPI app without production infrastructure, generates the OpenAPI document, and writes canonical JSON to `contracts/openapi.json` with deterministic, git-diff-stable output (API-01)
+- [ ] The generated document describes the same HTTP API FastAPI exposes at runtime
+- [ ] `contracts/openapi.json` is committed and never manually edited — generated output only (DM-API01); exactly one canonical contract file, no duplicate OpenAPI JSON/YAML copies anywhere in the repo
+- [ ] CI regenerates the document and compares it with committed `contracts/openapi.json`; any difference → CI FAIL (drift guard; API-02, API-03)
+- [ ] Frontend TypeScript types are generated from `contracts/openapi.json` only; Zod remains for frontend runtime validation — generated types do not replace it (API-04; OQ-A03)
+- [ ] OpenAPI version is the one emitted by the pinned FastAPI/Pydantic toolchain — never manually authored; runtime `/openapi.json` comes from the same app definition (no handwritten runtime document)
+- [ ] All fixtures API-01…API-04 in `08_EVALS.md` §12 pass
+
+**OpenCode Prompt:**
+```
+Implement the ASPIRE API contract pipeline (DM-API01 — FROZEN).
+
+Reference:
+- docs/04_ARCHITECTURE.md Section 4 (Service Communication Rules)
+- docs/05_DATA_API_CONTRACTS.md intro (API contract authority)
+- docs/08_EVALS.md Section 12 (API-01…API-04)
+
+Authority hierarchy (do not deviate):
+FastAPI routes + Pydantic models → generated contracts/openapi.json →
+frontend generated TypeScript types.
+
+1. Add scripts/generate_openapi.py: deterministic generation command that
+   a. imports the FastAPI app without production infrastructure (no live DB,
+      no external services needed for app import),
+   b. generates the OpenAPI document via FastAPI's own mechanism,
+   c. writes canonical JSON to contracts/openapi.json,
+   d. produces stable/deterministic output (stable key ordering and
+      formatting) suitable for git diff.
+2. Commit the generated contracts/openapi.json.
+3. Add a CI drift check: regenerate and diff against the committed artifact —
+   any difference fails CI.
+4. Wire frontend type generation to consume contracts/openapi.json (generated
+   types are compile-time/API-contract types only).
+
+Rules:
+- NEVER hand-edit contracts/openapi.json or author endpoint schemas into it.
+- No second contract format (no duplicate OpenAPI JSON/YAML files anywhere).
+- FastAPI routes + Pydantic models are the ONLY source of truth; openapi.json
+  is a generated artifact; TS types are derived — never treat openapi.json as
+  hand-maintained source-of-truth.
+- Runtime /openapi.json stays FastAPI-generated from the same app definition —
+  no separate handwritten runtime OpenAPI document.
+- Use the OpenAPI version emitted by the pinned FastAPI/Pydantic toolchain.
+- Zod runtime validation on the frontend stays — generated types do not
+  replace it.
+- No auth/RBAC semantics changes. No new service or package.
 ```
 
 ---
@@ -1516,6 +1580,7 @@ T-000 (Scaffold)
   │           └── T-050 (Ingestion)          │
   └── T-003 (LLMService)                     │
                                              │
+T-011 + T-001 → T-012 (OpenAPI Contract)
 T-031 + T-032 + T-033 → T-040 (Student State API)
 T-033 + T-020 → T-041 (Task Engine)
 T-033 + T-020 → T-050 (Ingestion)

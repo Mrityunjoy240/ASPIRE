@@ -12,6 +12,8 @@
 > **The System Spec (`03_SYSTEM_SPEC.md`) and this document must agree exactly.**
 > If there is a conflict between them, stop and escalate before writing any code.
 
+> **API contract authority (DM-API01 — FROZEN):** The HTTP API source of truth is **FastAPI route definitions + Pydantic request/response models**. FastAPI generates the OpenAPI document from them; the committed generated artifact **`contracts/openapi.json`** is the reviewable contract consumed by the TypeScript frontend (generated TS types are derived artifacts — never hand-edited, no duplicate contract files, CI fails on drift). This document remains the source of truth for the PostgreSQL schema and the *specification* of API boundaries; the machine-readable contract artifact is `contracts/openapi.json`.
+
 > [!CAUTION]
 > **OQ-06 (CIA/PCIA exact structure) is still OPEN.** The Assessment tables are marked
 > `[PENDING OQ-06]` and must not be built until that open item is resolved by Bishesh.
@@ -372,6 +374,8 @@ updated_by       UUID REFERENCES users(id)
 These rules govern how every service and agent may interact with the database.
 **No agent writes to these tables directly via SQL.**
 All writes go through the typed API layer.
+
+> The machine-readable contract for these endpoints is the generated **`contracts/openapi.json`** (DM-API01) — FastAPI routes + Pydantic models are the source of truth; the committed artifact is generated, never hand-edited.
 
 | Resource | GET | POST | PATCH | DELETE |
 |---|---|---|---|---|
