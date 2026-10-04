@@ -197,7 +197,7 @@ def compute_trend(eligible_assessments: list) -> str:
 }
 ```
 
-> **`OVERDUE` is a derived state, not a stored status.** A task is considered OVERDUE when `deadline < now` AND `status == PENDING`. It must not be persisted as an independent status unless an audited business rule requires persistence (team decision required before implementation).
+> **`OVERDUE` is a derived state, not a stored status — DM-SS02 / OQ-SS02 = DECIDED (Option A).** A task is `OVERDUE` when `status = PENDING` AND `deadline < now`. It must NOT exist as an independent persisted value in the task status enum; stored statuses remain `PENDING | COMPLETED | SNOOZED`. The task engine/UI may display `OVERDUE` as a derived state. No scheduler job may rewrite `PENDING → OVERDUE` in the database. Completing a task removes the derived `OVERDUE` state automatically. Tasks with `deadline = NULL` can never be `OVERDUE`. Existing explicit business states are never overwritten merely because a deadline has passed.
 
 > Rule: Lower `deadline` timestamp always takes precedence over explicit source priority.
 
@@ -384,5 +384,5 @@ For agent-triggered mutations, the provenance chain must be traceable:
 | OQ-08 | Exact roll number format at BCREC | Bishesh | 🔴 OPEN |
 | OQ-AG03 | Scheduler mechanism for EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE | Bishesh | 🔴 OPEN |
 | OQ-SS01 | `ATTENDANCE_WATCH` margin — what value? Team must agree before this signal is implemented. | All | 🔴 OPEN |
-| OQ-SS02 | `OVERDUE` — derived display state or persisted status? Team decision required before task engine is built. | All | 🔴 OPEN |
+| OQ-SS02 | `OVERDUE` — derived display state or persisted status? | All | ✅ RESOLVED — DM-SS02 (Option A): derived, never persisted |
 | OQ-SS03 | Mentor queue exact sort order — agreed here: Urgency > Exam Proximity > Days Since Action. Confirm before implementation. | All | 🟡 PROPOSED |

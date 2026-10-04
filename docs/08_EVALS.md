@@ -142,3 +142,16 @@ This end-to-end fixture must pass before any demo or milestone review.
 | PQ-01 | Student A: CRITICAL + exam in 5 days. Student B: WARNING. | A before B |
 | PQ-02 | Both URGENT. A: data updated 1h ago. B: data updated 3 days ago. | A before B (fresher data) |
 | PQ-03 | Both URGENT, same freshness. A: mentor last acted 10 days ago. B: 1 day ago. | A before B (older untouched) |
+
+---
+
+## 10. Task Derived-State (OVERDUE) Fixtures
+
+`OVERDUE` is derived, never stored (DM-SS02 / OQ-SS02 — Option A). These fixtures must pass before the Task API (T-041) is merged.
+
+| ID | Input | Expected Output |
+|---|---|---|
+| TS-01 | status=PENDING, deadline in the past | Derived state = OVERDUE |
+| TS-02 | status=PENDING, deadline in the future | Not OVERDUE |
+| TS-03 | status=COMPLETED, deadline in the past | Not OVERDUE |
+| TS-04 | status=PENDING, deadline=NULL | Never OVERDUE |

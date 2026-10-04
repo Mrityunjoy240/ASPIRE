@@ -799,7 +799,7 @@ Rules:
 ---
 
 ### T-041 — Task Schema + Unified Task API
-**Status:** 🔒 BLOCKED on T-033; OQ-SS02 unresolved (03_SYSTEM_SPEC v1.2 §5 — OVERDUE derived vs persisted)
+**Status:** 🔒 BLOCKED on T-033; OQ-SS02 resolved — DM-SS02 (Option A: OVERDUE derived, not persisted)
 **PRD Ref:** P0-05
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 5, 05_DATA_API_CONTRACTS.md Section 6
 **Branch:** `feature/task-engine`
@@ -811,7 +811,8 @@ Rules:
 - `PATCH /api/v1/students/:studentId/tasks/:taskId` — update status
 
 **Acceptance Criteria:**
-- [ ] Tasks are sorted by: OVERDUE → deadline ASC → explicit_priority DESC → source_type rank → created_at ASC (Spec 5.2)
+- [ ] Tasks are sorted by: derived OVERDUE → deadline ASC → explicit_priority DESC → source_type rank → created_at ASC (Spec 5.2)
+- [ ] OVERDUE derived at query time (DM-SS02): `status = PENDING AND deadline < now`; never persisted; no scheduler job rewrites PENDING → OVERDUE; `deadline = NULL` never OVERDUE
 - [ ] PATCH emits `AuditEvent`
 - [ ] `source_type` rank: MENTOR > ASSESSMENT > AI_PLAN > CALENDAR
 - [ ] Student can only PATCH their own tasks
@@ -827,7 +828,9 @@ Reference:
 PART 1 — SQL migration in db/migrations/ (AUTHORITATIVE — DM-NEW-ORM01):
 - Define student_tasks per docs/05_DATA_API_CONTRACTS.md — Unified Task Table.
 - Enums per 05: task_source_type (CALENDAR, ASSESSMENT, AI_PLAN, MENTOR),
-  task_status (PENDING, COMPLETED, OVERDUE, SNOOZED).
+  task_status (PENDING, COMPLETED, SNOOZED). OVERDUE is never persisted —
+  derive it at query time (DM-SS02): status = PENDING AND deadline < now;
+  deadline IS NULL is never OVERDUE.
 - 05 is the contract: on any conflict with historical model fields, 05 wins.
   Missing columns = contract gap to raise — do not invent.
 - Add the SQLAlchemy 2.x mirror model (runtime access only — not a schema source).
@@ -838,7 +841,7 @@ GET handler:
 - requireRole(['STUDENT', 'MENTOR'])
 - RBAC scope check
 - Fetch tasks, apply sorting in this strict cascade (docs/03_SYSTEM_SPEC.md Section 5.2):
-  1. status === 'OVERDUE' first
+  1. derived OVERDUE first (status === 'PENDING' && deadline != null && deadline < now)
   2. deadline ascending (nulls last)
   3. explicitPriority descending (nulls last)
   4. sourceType rank: MENTOR=1, ASSESSMENT=2, AI_PLAN=3, CALENDAR=4 ascending

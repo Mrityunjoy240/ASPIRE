@@ -258,7 +258,9 @@ updated_at       TIMESTAMPTZ
 `CALENDAR | ASSESSMENT | AI_PLAN | MENTOR`
 
 **Enum: `task_status`**
-`PENDING | COMPLETED | OVERDUE | SNOOZED`
+`PENDING | COMPLETED | SNOOZED`
+
+> **DM-SS02 / OQ-SS02 = DECIDED (Option A):** `OVERDUE` must NOT exist as an independent persisted value. It is derived at query time when `status = PENDING AND deadline < now`; tasks with `deadline = NULL` can never be `OVERDUE`; completing a task removes the derived state automatically. No scheduler job rewrites `PENDING → OVERDUE` in the database.
 
 ---
 
