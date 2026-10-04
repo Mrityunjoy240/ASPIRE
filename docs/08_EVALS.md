@@ -163,3 +163,19 @@ Mentor queue ordering is FROZEN per DM-SS03 / OQ-SS03 (Option A) — 03_SYSTEM_S
 | TS-02 | status=PENDING, deadline in the future | Not OVERDUE |
 | TS-03 | status=COMPLETED, deadline in the past | Not OVERDUE |
 | TS-04 | status=PENDING, deadline=NULL | Never OVERDUE |
+
+---
+
+## 11. Scheduler Fixtures (DM-AG03)
+
+The time-based scheduler (periodic, every 5 minutes — 03_SYSTEM_SPEC §8.3) must pass these fixtures before it is merged.
+
+| ID | Input | Expected Output |
+|---|---|---|
+| SCH-01 | Exam crosses the configured "exam approaching" rule | `EXAM_APPROACHING` event emitted |
+| SCH-02 | Same true condition persists across repeated scheduler cycles | No duplicate logical event — one logical trigger occurrence produces one logical event |
+| SCH-03 | Scheduler cycle delayed/missed (e.g., downtime) | Next cycle recovers from current database state and emits the outstanding logical event exactly once |
+| SCH-04 | Task with status=PENDING, deadline in the past | `TASK_OVERDUE` emitted |
+| SCH-05 | Task with status=COMPLETED, deadline in the past | No `TASK_OVERDUE` emitted |
+| SCH-06 | Task with status=PENDING, deadline=NULL | `TASK_OVERDUE` never emitted |
+| SCH-07 | After `TASK_OVERDUE` emission | DB status remains PENDING — `OVERDUE` is never persisted (DM-SS02) |

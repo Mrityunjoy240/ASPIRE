@@ -143,6 +143,14 @@ Tracing the "Student S-204 at risk" scenario through the full stack.
 - **Agents → Database:** Agents NEVER call Supabase/PostgreSQL directly. They call typed FastAPI tool endpoints which enforce RBAC.
 - **Agents → LLM:** Agents call `LLMService` class only. `LLMService` calls OpenRouter.
 - **No agent-to-agent HTTP calls.** All agent coordination goes through LangGraph graph state.
+- **Time-based scheduler (DM-AG03 — FROZEN):** The application runs one scheduler evaluation at startup, then every **5 minutes**. Execution is idempotent (missed/delayed cycles recover from current DB state; no duplicate logical events) and the scheduler **never directly mutates business state** — it never calls agents/LLMs and never persists `OVERDUE` (DM-SS02).
+
+```text
+periodic scheduler
+  → time-condition evaluation
+  → domain event emission
+  → existing event-driven processing / RULE_ENGINE
+```
 
 ---
 

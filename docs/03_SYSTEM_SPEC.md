@@ -296,7 +296,45 @@ Every event name in `06_AGENT_SPEC.md` triggers must match exactly the names bel
 | `DATA_CONFLICT` | Ingestion Engine | Conflict detected on import |
 | `MENTOR_FOLLOWUP_DUE` | Follow-up Scheduler | Per intervention policy |
 
-> **[OPEN: OQ-AG03]** — The scheduler mechanism for `EXAM_APPROACHING`, `TASK_OVERDUE`, and `MENTOR_FOLLOWUP_DUE` must be defined (cron job or event-driven) before these can be implemented.
+### 8.3 Time-Based Scheduler (DM-AG03 / OQ-AG03 — FROZEN: hybrid trigger model)
+
+- **State-change events remain event-driven.**
+- **Time-based events use a periodic application scheduler running every 5 minutes.** Covered events: `EXAM_APPROACHING`, `TASK_OVERDUE`, `MENTOR_FOLLOWUP_DUE`.
+- The scheduler evaluates time-based conditions and emits domain events. It does not directly invoke agents or mutate business state.
+
+**Architecture boundary:**
+```text
+DB/current state
+      ↓
+periodic scheduler
+      ↓
+evaluate time condition
+      ↓
+emit domain event
+      ↓
+existing event-driven routing / Supervisor
+```
+
+**Scheduler lifecycle:**
+- Run one evaluation immediately at application startup.
+- Then run every **5 minutes**.
+- A delayed/missed cycle must be recoverable by the next evaluation from current database state.
+- Scheduler execution MUST be idempotent: one logical trigger occurrence must not produce duplicate logical events. Do not create duplicate events merely because the same condition remains true across multiple scheduler cycles.
+
+**`TASK_OVERDUE` rule (DM-SS02 preserved):**
+- `OVERDUE` remains a derived display/query state: `status = PENDING AND deadline < now`.
+- The scheduler MUST NOT persist `OVERDUE` and MUST NOT rewrite `PENDING → OVERDUE`.
+- The scheduler MAY emit `TASK_OVERDUE` when the task crosses the deadline condition.
+
+**Business-rule ownership:**
+The scheduler MUST NOT invent or hardcode business thresholds. For example, the definition of "exam approaching" remains owned by the applicable system/configuration rule. The scheduler only evaluates that frozen rule against current time/state.
+
+**The scheduler MUST NOT:**
+- directly call an LLM
+- directly execute an agent plan
+- directly approve or mutate human-authority decisions
+- persist `OVERDUE`
+- replace the existing event-driven architecture for ordinary state changes
 
 ---
 
@@ -328,14 +366,16 @@ The Calendar Engine produces `exam_days_remaining` — agents read this value; t
 | `PENDING_APPROVAL` | Mentor approves | Mentor | `ACTIVE` |
 | `PENDING_APPROVAL` | Mentor edits + approves | Mentor | `ACTIVE` |
 | `PENDING_APPROVAL` | Mentor rejects | Mentor | `REPLAN_REQUIRED` |
-| `ACTIVE` | Follow-up due | Scheduler | `MONITORING` |
-| `MONITORING` | Improvement verified by engine | Rule Engine | `RESOLVED` |
-| `MONITORING` | No improvement, follow-up expires | Scheduler | `REPLAN_REQUIRED` |
+| `ACTIVE` | Follow-up due | `RULE_ENGINE` (on scheduler-emitted event) | `MONITORING` |
+| `MONITORING` | Improvement verified by engine | `RULE_ENGINE` | `RESOLVED` |
+| `MONITORING` | No improvement, follow-up expires | `RULE_ENGINE` (on scheduler-emitted event) | `REPLAN_REQUIRED` |
 | `REPLAN_REQUIRED` | New plan proposed | Agent | `PLAN_PROPOSED` |
 | `REPLAN_REQUIRED` | Escalation proposed | Intervention Agent | `ESCALATION_REQUIRED` |
 | `ESCALATION_REQUIRED` | Mentor escalates to HOD/CT | Mentor | `ESCALATION_REQUIRED` (pending HOD) |
 | `RESOLVED` | Mentor closes | Mentor | `CLOSED` |
 | Any state | Data conflict on affecting fact | Ingestion Engine | Automation paused (see §11) |
+
+> **Scheduler boundary (DM-AG03):** The Scheduler only evaluates time conditions and emits the time-based domain event (§8.3). It does not directly mutate case state. The deterministic event consumer / `RULE_ENGINE` validates and performs the transition shown above.
 
 ---
 
@@ -395,7 +435,7 @@ For agent-triggered mutations, the provenance chain must be traceable:
 | OQ-06 | CIA/PCIA component structure and weights for autonomous batches | Bishesh | 🔴 OPEN — blocks assessment engine |
 | OQ-07 | MAR points calculation rules | Abhijit | 🔴 OPEN |
 | OQ-08 | Exact roll number format at BCREC | Bishesh | 🔴 OPEN |
-| OQ-AG03 | Scheduler mechanism for EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE | Bishesh | 🔴 OPEN |
+| OQ-AG03 | Scheduler mechanism for EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE | Bishesh | ✅ RESOLVED — DM-AG03 (hybrid: event-driven state changes + 5-minute periodic scheduler, §8.3) |
 | OQ-SS01 | `ATTENDANCE_WATCH` margin — what value? Team must agree before this signal is implemented. | All | 🔴 OPEN |
 | OQ-SS02 | `OVERDUE` — derived display state or persisted status? | All | ✅ RESOLVED — DM-SS02 (Option A): derived, never persisted |
 | OQ-SS03 | Mentor queue exact sort order | All | ✅ RESOLVED — DM-SS03 (Option A): frozen in §6.2 |

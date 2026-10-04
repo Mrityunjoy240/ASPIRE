@@ -813,6 +813,7 @@ Rules:
 **Acceptance Criteria:**
 - [ ] Tasks are sorted by: derived OVERDUE → deadline ASC → explicit_priority DESC → source_type rank → created_at ASC (Spec 5.2)
 - [ ] OVERDUE derived at query time (DM-SS02): `status = PENDING AND deadline < now`; never persisted; no scheduler job rewrites PENDING → OVERDUE; `deadline = NULL` never OVERDUE
+- [ ] TASK_OVERDUE emission follows DM-AG03 (03 §8.3): periodic 5-minute scheduler (one evaluation at startup, then every 5 min), idempotent (no duplicate logical events), missed cycles recovered from DB state; emission NEVER persists OVERDUE or rewrites `PENDING → OVERDUE`
 - [ ] PATCH emits `AuditEvent`
 - [ ] `source_type` rank: MENTOR > ASSESSMENT > AI_PLAN > CALENDAR
 - [ ] Student can only PATCH their own tasks
@@ -859,6 +860,7 @@ PATCH handler:
 Rules:
 - CONSTITUTION S-01: requireRole on every endpoint.
 - CONSTITUTION S-04: Every PATCH emits audit event.
+- DM-AG03: TASK_OVERDUE is emitted only by the 5-minute periodic scheduler (startup + every 5 min, idempotent, recovered from DB state) — never persist OVERDUE, never rewrite PENDING → OVERDUE. Scheduling logic lives outside agents.
 - TypeScript strict.
 ```
 
@@ -1086,6 +1088,69 @@ Rules:
 - CONSTITUTION S-02: Mentor sees only their assigned students' cases.
 - CONSTITUTION S-04: Every PATCH emits audit event.
 - TypeScript strict.
+```
+
+---
+
+### T-062 — Time-Based Scheduler / Event Emitter
+**Status:** 🔒 BLOCKED on T-041, T-060
+**PRD Ref:** P0-04, P0-05, P0-09
+**Spec Ref:** 03_SYSTEM_SPEC.md Section 8.3 (DM-AG03), Section 10.2, 08_EVALS.md Section 11
+**Branch:** `feature/time-scheduler`
+**Depends on:** T-041 ✅, T-060 ✅
+
+**What gets built:**
+- Periodic application scheduler implementing the frozen DM-AG03 mechanism (03 §8.3): one evaluation at application startup, then every 5 minutes
+- Evaluators + emitters for `EXAM_APPROACHING`, `TASK_OVERDUE`, `MENTOR_FOLLOWUP_DUE`
+- Missed-cycle recovery + idempotent execution (duplicate logical-event prevention)
+
+**Acceptance Criteria:**
+- [ ] One evaluation runs immediately at application startup, then every 5 minutes (DM-AG03)
+- [ ] Time conditions are evaluated against current DB state using frozen rules — the scheduler hardcodes NO business thresholds (the "exam approaching" definition stays owned by its system/config rule)
+- [ ] Emits only `EXAM_APPROACHING`, `TASK_OVERDUE`, `MENTOR_FOLLOWUP_DUE` as domain events into the existing event-driven routing — never calls agents/LLMs directly
+- [ ] Idempotent: one logical trigger occurrence produces one logical event; a condition staying true across cycles produces no duplicates (SCH-02)
+- [ ] Missed/delayed cycle recovered on the next evaluation from current DB state (SCH-03)
+- [ ] `TASK_OVERDUE` emitted only when `status = PENDING AND deadline < now` — never for COMPLETED, never when `deadline = NULL` (SCH-04, SCH-05, SCH-06)
+- [ ] Scheduler NEVER persists `OVERDUE` and NEVER rewrites `PENDING → OVERDUE` (SCH-07, DM-SS02)
+- [ ] Scheduler NEVER performs case-state mutation — case-state changes resulting from scheduler-produced events belong to the deterministic event-consumer / `RULE_ENGINE` path (03 §10.2), not to T-062's scheduler execution
+- [ ] All fixtures SCH-01…SCH-07 in 08_EVALS.md §11 pass
+
+**OpenCode Prompt:**
+```
+Build the Time-Based Scheduler / Event Emitter for ASPIRE (DM-AG03 — FROZEN).
+
+Reference:
+- docs/03_SYSTEM_SPEC.md Section 8.3 (Time-Based Scheduler) and Section 10.2
+- docs/04_ARCHITECTURE.md Section 4 (Service Communication Rules)
+- docs/08_EVALS.md Section 11 (fixtures SCH-01…SCH-07)
+
+Implementation — runs inside the existing API application (FastAPI, 04 §2).
+No new service, package, or database table.
+
+1. On application startup: run one scheduler evaluation immediately.
+2. Then run one evaluation every 5 minutes.
+3. Each evaluation:
+   a. Read current DB state (student_tasks, calendar/exam state, intervention
+      follow-up state).
+   b. Evaluate frozen time conditions — thresholds come from the applicable
+      system/config rule, never hardcoded in the scheduler.
+   c. Emit domain events EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE
+      into the existing event-driven routing / Supervisor pipeline.
+4. Idempotency: one logical trigger occurrence must produce exactly one logical
+   event across restarts and repeated cycles (persist/derive fired-trigger state).
+   A missed or delayed cycle is recovered from current DB state on the next
+   evaluation — do not emit duplicates merely because a condition stays true.
+
+Rules:
+- The scheduler emits events ONLY. It never mutates task or case state.
+- TASK_OVERDUE: emit only when status = PENDING AND deadline < now. NEVER
+  persist OVERDUE; NEVER rewrite PENDING → OVERDUE (DM-SS02).
+- Case-state transitions triggered by these events are validated and performed
+  by the deterministic event consumer / RULE_ENGINE (03 §10.2) — not by the
+  scheduler itself.
+- The scheduler never calls an LLM, never executes an agent plan, and never
+  approves or mutates human-authority decisions (DM-AG03 MUST-NOT list).
+- No new business thresholds. No new case transitions. No new service/package.
 ```
 
 ---
@@ -1441,6 +1506,7 @@ T-033 + T-020 → T-041 (Task Engine)
 T-033 + T-020 → T-050 (Ingestion)
 T-041 + T-033 → T-060 (Intervention Schema)
 T-060 + T-011 → T-061 (Mentor Queue API)
+T-041 + T-060 → T-062 (Time-Based Scheduler)
 T-033 + T-020 → T-070 (Learning Workspace)
 T-070 + T-003 → T-071 (Quiz Generation)
 T-061 + T-040 + T-003 → T-080 (Supervisor Agent)

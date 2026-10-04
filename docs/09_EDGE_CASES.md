@@ -100,3 +100,18 @@ Queue ordering is FROZEN per DM-SS03 / OQ-SS03 (Option A) — 03_SYSTEM_SPEC §6
 | EC-MQ-03 | Two ATTENTION (or MONITOR) cases, exams in 2 vs 30 days, same `days_since_last_mentor_action` | Exam proximity is NOT a sort key outside URGENT — order is decided by the remaining keys (tie-breakers), as if the exam field does not exist. |
 | EC-MQ-04 | Two cases tied on band, exam, and `days_since_last_mentor_action`, different `created_at`/`case_id` | Deterministic tie-break: `created_at` ASC, then `case_id` ASC — same input always produces the same order. |
 | EC-MQ-05 | All sort fields equal; one case's data updated 1h ago, the other 3 days ago | `data_staleness_hours` is badge/display-only — ordering is identical regardless of staleness. |
+
+---
+
+## Category 8: Scheduler
+
+Scheduler behavior is FROZEN per DM-AG03 / OQ-AG03 (hybrid model, 5-minute periodic scheduler) — 03_SYSTEM_SPEC §8.3.
+
+| ID | Scenario | Expected Behavior |
+|---|---|---|
+| EC-SCH-01 | Application restarts while a time condition is/was true | One evaluation runs immediately at startup; conditions are evaluated from current DB state; no duplicate logical events for triggers already emitted. |
+| EC-SCH-02 | Scheduler cycle delayed or missed | The next cycle recovers from current database state; the outstanding logical event is emitted (once), not lost. |
+| EC-SCH-03 | Same condition remains true across many consecutive cycles | No duplicate logical events — idempotent execution; one logical trigger occurrence = one logical event. |
+| EC-SCH-04 | Deadline crosses between two 5-minute cycles | `TASK_OVERDUE` is emitted at the next evaluation (≤5 minutes later); `OVERDUE` is never persisted — DB status stays PENDING. |
+| EC-SCH-05 | Task already COMPLETED (condition resolved) when the scheduler evaluates | No `TASK_OVERDUE` emitted. |
+| EC-SCH-06 | Task has `deadline = NULL` | `TASK_OVERDUE` never emitted; derived OVERDUE never applies (DM-SS02). |

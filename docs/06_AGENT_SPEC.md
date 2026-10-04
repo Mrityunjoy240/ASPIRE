@@ -60,8 +60,9 @@ These rules apply to ALL agents without exception.
 
 > [!IMPORTANT]
 > All events above must appear with the **exact same name** in `03_SYSTEM_SPEC.md §8`.
-> `EXAM_APPROACHING`, `TASK_OVERDUE`, and `MENTOR_FOLLOWUP_DUE` require a scheduler/job mechanism
-> to emit them — this mechanism must be defined before these triggers are coded.
+> `EXAM_APPROACHING`, `TASK_OVERDUE`, and `MENTOR_FOLLOWUP_DUE` are **time-based events emitted by the
+> periodic application scheduler (every 5 minutes) defined in `03_SYSTEM_SPEC.md §8.3` — DM-AG03 (FROZEN)**.
+> The Supervisor consumes them like any other event; scheduling logic never lives in agents.
 
 **Deterministic Routing Table:**
 
@@ -305,4 +306,4 @@ Constitution P-02: The deterministic core must remain operational when the LLM i
 |---|---|---|---|
 | OQ-AG01 | Default model for P0? Must be chosen via evaluation, not reputation. | Mrityunjoy | 🔴 OPEN |
 | OQ-AG02 | Which agents run synchronously vs. async background jobs? | Mrityunjoy + Bishesh | 🔴 OPEN — affects API design |
-| OQ-AG03 | Scheduler mechanism for `EXAM_APPROACHING`, `TASK_OVERDUE`, `MENTOR_FOLLOWUP_DUE` events — cron job or event-driven? | Bishesh | 🔴 OPEN |
+| OQ-AG03 | Scheduler mechanism for `EXAM_APPROACHING`, `TASK_OVERDUE`, `MENTOR_FOLLOWUP_DUE` events — cron job or event-driven? | Bishesh | ✅ RESOLVED — DM-AG03 (hybrid: event-driven state changes + 5-minute periodic scheduler) |
