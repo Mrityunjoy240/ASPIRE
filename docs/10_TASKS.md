@@ -1023,7 +1023,7 @@ Rules:
 ---
 
 ### T-061 — Mentor Priority Queue API
-**Status:** 🔒 BLOCKED on T-060, T-011; OQ-SS03 not yet confirmed (03_SYSTEM_SPEC v1.2 §6.2 — queue sort is PROPOSED)
+**Status:** 🔒 BLOCKED on T-060, T-011; OQ-SS03 resolved — DM-SS03 (Option A: frozen in 03 §6.2)
 **PRD Ref:** P0-09
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 6, 05_DATA_API_CONTRACTS.md Section 13 — MENTOR QUEUE
 **Branch:** `feature/mentor-queue-api`
@@ -1034,7 +1034,9 @@ Rules:
 - `PATCH /api/v1/cases/:caseId/mentor-action`
 
 **Acceptance Criteria:**
-- [ ] Queue sorted: urgency_band → data_staleness_hours ASC → days_since_last_mentor_action DESC
+- [ ] Queue sorted exactly per 03 §6.2 (DM-SS03): band URGENT > ATTENTION > MONITOR; URGENT → `exam_days_remaining` ASC (NULLS LAST) → `days_since_last_mentor_action` DESC (NULLS FIRST); ATTENTION/MONITOR → `days_since_last_mentor_action` DESC only (no exam proximity); final tie-breakers `created_at` ASC, then `case_id` ASC
+- [ ] `data_staleness_hours` is badge/display-only — never a queue sort key
+- [ ] All fixtures PQ-01…PQ-09 in 08_EVALS.md §9 pass
 - [ ] Mentor sees ONLY their assigned students' cases (Constitution S-02)
 - [ ] PATCH creates `CaseMentorAction` row AND validates state transition
 - [ ] Invalid state transition returns 422
@@ -1052,12 +1054,14 @@ GET handler:
 - requireRole(['MENTOR', 'HOD'])
 - If MENTOR: verify mentorId matches JWT userId. Fetch only cases where mentor_user_id matches.
 - Compute per case:
-  * data_staleness_hours: hours since the most recent attendance record update for that student
-  * days_since_last_mentor_action: days since the most recent CaseMentorAction for this case (null if none)
-- Sort cases strictly by (docs/03_SYSTEM_SPEC.md Section 6.2):
+  * data_staleness_hours: hours since the most recent attendance record update for that student (badge/display ONLY — never a sort key)
+  * days_since_last_mentor_action: days since the most recent CaseMentorAction for this case (null if never acted)
+- Sort cases strictly by (docs/03_SYSTEM_SPEC.md Section 6.2 — DM-SS03 frozen):
   1. urgencyBand: URGENT=1, ATTENTION=2, MONITOR=3 ASC
-  2. data_staleness_hours ASC
-  3. days_since_last_mentor_action DESC (nulls first — longest unattended first)
+  2. URGENT only: exam_days_remaining ASC (NULLS LAST)
+  3. days_since_last_mentor_action DESC (NULLS FIRST — never acted on)
+  4. final tie-breakers: createdAt ASC, then caseId ASC
+  (ATTENTION/MONITOR skip step 2 — no exam proximity outside URGENT.)
 - Return array matching the queue card shape from docs/05_DATA_API_CONTRACTS.md Section 13.
 
 PART 2 — Create apps/web/app/api/v1/cases/[caseId]/mentor-action/route.ts:

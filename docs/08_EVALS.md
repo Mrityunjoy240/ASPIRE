@@ -135,13 +135,21 @@ This end-to-end fixture must pass before any demo or milestone review.
 
 ---
 
-## 9. Priority Queue Accuracy Test
+## 9. Priority Queue Accuracy Test (Mentor Queue)
+
+Mentor queue ordering is FROZEN per DM-SS03 / OQ-SS03 (Option A) — 03_SYSTEM_SPEC §6.2. These fixtures must pass before the Mentor Queue API (T-061) is merged.
 
 | ID | Setup | Expected Queue Order |
 |---|---|---|
-| PQ-01 | Student A: CRITICAL + exam in 5 days. Student B: WARNING. | A before B |
-| PQ-02 | Both URGENT. A: data updated 1h ago. B: data updated 3 days ago. | A before B (fresher data) |
-| PQ-03 | Both URGENT, same freshness. A: mentor last acted 10 days ago. B: 1 day ago. | A before B (older untouched) |
+| PQ-01 | Case A: URGENT, exam in 5 days. Case B: ATTENTION (WARNING). | A before B (band decided first) |
+| PQ-02 | Case A: URGENT, data updated 1h ago. Case B: URGENT, data updated 3 days ago. All other sort fields equal. | Order identical to the input without staleness — `data_staleness_hours` does NOT affect ordering |
+| PQ-03 | Case A: URGENT, mentor last acted 10 days ago. Case B: URGENT, 1 day ago. Same exam. | A before B (older untouched) |
+| PQ-04 | Case A: URGENT, exam in 3 days. Case B: URGENT, exam in 10 days. | A before B (nearer exam beats farther exam) |
+| PQ-05 | Case A: URGENT, exam in 5 days. Case B: URGENT, exam_days_remaining=NULL. | A before B (known exam beats NULL exam — NULLS LAST within URGENT) |
+| PQ-06 | Case A: URGENT, days_since_last_mentor_action=NULL (never acted). Case B: URGENT, acted 1 day ago. Same exam. | A before B (NULLS FIRST — never acted on) |
+| PQ-07 | Case A: ATTENTION, exam in 2 days. Case B: ATTENTION, exam in 30 days. Same days_since_last_mentor_action. | Exam proximity ignored in ATTENTION — order as if no exam field exists |
+| PQ-08 | Case A: MONITOR, exam in 1 day. Case B: MONITOR, exam in 10 days. Same days_since_last_mentor_action. | Exam proximity ignored in MONITOR — order as if no exam field exists |
+| PQ-09 | Two cases tied on band, exam, and days_since_last_mentor_action. A has earlier created_at (and lower case_id). | A before B (created_at ASC, then case_id ASC — deterministic final ordering) |
 
 ---
 

@@ -220,12 +220,25 @@ Sorts open **intervention cases** (not students).
 - **MONITOR:** Manual snooze, or routine check
 
 ### 6.2 Queue Sorting Precedence
-1. Urgency Band (`URGENT > ATTENTION > MONITOR`)
-2. `exam_days_remaining` ASC within URGENT band (most imminent exam first)
-3. `days_since_last_mentor_action` DESC (oldest untouched cases first)
-4. Data freshness is shown as a **visible badge per case**, not used as a sort key
 
-> Data staleness is surfaced as information to the mentor — it is not a primary sort key. Stale data should not cause a new urgent case to be buried beneath an old fresh one.
+**FROZEN — DM-SS03 / OQ-SS03 (Option A).**
+
+1. Urgency Band (`URGENT > ATTENTION > MONITOR`) — decided first for every case.
+
+**URGENT cases only:**
+1. `exam_days_remaining` ASC (most imminent exam first). `exam_days_remaining = NULL` sorts **NULLS LAST** within URGENT.
+2. `days_since_last_mentor_action` DESC (oldest untouched first). `NULL` sorts **NULLS FIRST** (never acted on).
+
+**ATTENTION / MONITOR cases:**
+1. `days_since_last_mentor_action` DESC only (same null rule: **NULLS FIRST**). Exam proximity is NOT used in these bands.
+
+**Final deterministic tie-breakers (every band, applied last):**
+1. `created_at` ASC
+2. `case_id` ASC
+
+`data_staleness_hours` is **badge/display-only** and MUST NOT be a queue sort key.
+
+> Data staleness is surfaced as information to the mentor — it is not a sort key. Stale data should not cause a new urgent case to be buried beneath an old fresh one.
 
 ---
 
@@ -385,4 +398,4 @@ For agent-triggered mutations, the provenance chain must be traceable:
 | OQ-AG03 | Scheduler mechanism for EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE | Bishesh | 🔴 OPEN |
 | OQ-SS01 | `ATTENDANCE_WATCH` margin — what value? Team must agree before this signal is implemented. | All | 🔴 OPEN |
 | OQ-SS02 | `OVERDUE` — derived display state or persisted status? | All | ✅ RESOLVED — DM-SS02 (Option A): derived, never persisted |
-| OQ-SS03 | Mentor queue exact sort order — agreed here: Urgency > Exam Proximity > Days Since Action. Confirm before implementation. | All | 🟡 PROPOSED |
+| OQ-SS03 | Mentor queue exact sort order | All | ✅ RESOLVED — DM-SS03 (Option A): frozen in §6.2 |

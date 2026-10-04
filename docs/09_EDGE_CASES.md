@@ -86,3 +86,17 @@
 | EC-IMP-03 | Same CSV is uploaded twice | Second upload detects that records for the same period already exist. Treated as a potential conflict and flagged, not silently applied. |
 | EC-IMP-04 | CSV contains a future date | Row is rejected. System does not accept attendance records for dates that have not yet occurred. |
 | EC-IMP-05 | Two admins upload conflicting CSVs simultaneously | The second upload's conflicting rows are quarantined. Conflict resolution UI shows both uploads. |
+
+---
+
+## Category 7: Mentor Queue
+
+Queue ordering is FROZEN per DM-SS03 / OQ-SS03 (Option A) — 03_SYSTEM_SPEC §6.2.
+
+| ID | Scenario | Expected Behavior |
+|---|---|---|
+| EC-MQ-01 | Two URGENT cases; one has `exam_days_remaining = NULL` | NULL exam sorts **NULLS LAST** within URGENT — the known-exam case ranks first. |
+| EC-MQ-02 | URGENT case never acted on (`days_since_last_mentor_action = NULL`) vs one acted 1 day ago, same exam | **NULLS FIRST** — the never-acted case ranks first. |
+| EC-MQ-03 | Two ATTENTION (or MONITOR) cases, exams in 2 vs 30 days, same `days_since_last_mentor_action` | Exam proximity is NOT a sort key outside URGENT — order is decided by the remaining keys (tie-breakers), as if the exam field does not exist. |
+| EC-MQ-04 | Two cases tied on band, exam, and `days_since_last_mentor_action`, different `created_at`/`case_id` | Deterministic tie-break: `created_at` ASC, then `case_id` ASC — same input always produces the same order. |
+| EC-MQ-05 | All sort fields equal; one case's data updated 1h ago, the other 3 days ago | `data_staleness_hours` is badge/display-only — ordering is identical regardless of staleness. |
