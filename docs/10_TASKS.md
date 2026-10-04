@@ -487,6 +487,7 @@ Rules:
 - [ ] Thresholds are parameters, NOT hardcoded in the function
 - [ ] All test fixtures pass (see below)
 - [ ] Constitution A-02: Zero LLM calls in this file
+- [ ] `LATE` is reserved (DM-NEW-LATE01): engine never generates `LATE` records; a VERIFIED calculation input must not contain `LATE`; no calculation assigns LATE any contribution semantics; no grace-period rule in v1
 
 **Test Fixtures (must all pass):**
 ```
@@ -509,7 +510,9 @@ Reference: docs/03_SYSTEM_SPEC.md Section 3
 
 PART 1 — SQL migration in db/migrations/ (AUTHORITATIVE — DM-NEW-ORM01):
 - Define attendance_records per docs/05_DATA_API_CONTRACTS.md — Attendance Tables.
-- Enums per 05 (attendance_status, record_status, source_type).
+- Enums per 05 (attendance_status, record_status, source_type). `LATE` is
+  reserved/unsupported as an input status (DM-NEW-LATE01): keep it in the enum;
+  never generate LATE records; VERIFIED calculation inputs must not contain LATE.
 - 05 is the contract: on any conflict with historical field lists (e.g., period-based
   records, PROVISIONAL/VERIFIED as status), 05 wins. Missing columns = contract
   gap to raise — do not invent.
@@ -884,6 +887,7 @@ Rules:
 - [ ] Constitution D-06: Original record preserved as SUPERSEDED, not overwritten
 - [ ] Only ADMIN can upload
 - [ ] **BLOCKED (contract gap):** `ingestion_jobs` and the IngestionStatus/IngestionDataType enums are missing from 05 → implementation BLOCKED until the Team Lead resolves the gap; do NOT create a guessed schema. Only fully specified parts (e.g., `data_conflicts`) may proceed if independently separable from the blocked part.
+- [ ] An imported or manually entered record containing `LATE` MUST fail validation and be rejected (DM-NEW-LATE01 — reserved/unsupported in v1): it must never become a VERIFIED attendance record and must never be silently coerced to PRESENT or ABSENT
 
 **OpenCode Prompt:**
 ```
@@ -941,6 +945,7 @@ Rules:
 - CONSTITUTION D-04: Conflicts block automation. Do not commit conflicting records as authoritative.
 - CONSTITUTION D-06: Original record → SUPERSEDED. New record → VERIFIED. Never overwrite.
 - CONSTITUTION S-04: Resolution emits audit event.
+- DM-NEW-LATE01: `LATE` is reserved/unsupported as an input status — an imported or manually entered record containing LATE MUST fail validation and be rejected; it never becomes a VERIFIED attendance record and is never silently coerced to PRESENT or ABSENT.
 - TypeScript strict.
 ```
 

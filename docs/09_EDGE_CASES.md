@@ -24,6 +24,7 @@
 | EC-ATT-06 | Attendance exactly at 65.00% | WARNING event emitted (at lower bound of condonation range). |
 | EC-ATT-07 | Attendance exactly at 64.99% | CRITICAL event emitted. |
 | EC-ATT-08 | Class is marked CANCELLED | Cancelled class is not counted in `conducted`. Student attendance % is not affected. |
+| EC-ATT-09 | A source (CSV import or entry flow) marks a record `LATE` | `LATE` is reserved/unsupported as an input status in v1 — DM-NEW-LATE01 (Option C): the input MUST fail validation and be rejected; the record never becomes a VERIFIED attendance record and is never silently coerced to PRESENT or ABSENT. The engine never generates `LATE`. No grace-period semantics; institutional semantics deferred to post-BCREC validation. |
 
 ---
 

@@ -149,7 +149,7 @@ id               UUID PRIMARY KEY
 student_id       UUID REFERENCES student_profiles(id)
 course_run_id    UUID REFERENCES course_runs(id)
 class_date       DATE NOT NULL
-status           attendance_status NOT NULL  -- PRESENT | ABSENT | LATE | CANCELLED
+status           attendance_status NOT NULL  -- PRESENT | ABSENT | LATE (reserved) | CANCELLED
 source_type      TEXT NOT NULL               -- CSV_IMPORT | MANUAL_ENTRY | API
 source_id        TEXT                        -- import batch ID or entry ID
 record_status    TEXT DEFAULT 'VERIFIED'     -- VERIFIED | PROVISIONAL | CONFLICT | SUPERSEDED
@@ -161,6 +161,8 @@ updated_at       TIMESTAMPTZ
 
 **Enum: `attendance_status`**
 `PRESENT | ABSENT | LATE | CANCELLED`
+
+> **DM-NEW-LATE01 = DECIDED (Option C):** `LATE` is **reserved / unsupported as an input status in v1** — kept in the enum for schema compatibility only. The v1 attendance engine never generates `LATE`; a VERIFIED attendance calculation input must not contain `LATE`. If an imported or manually entered record contains `LATE`, the input MUST fail validation and be rejected — it must not become a VERIFIED attendance record and must not be silently coerced to PRESENT or ABSENT. No grace-period/configuration semantics in v1. Real institutional semantics may be decided later after BCREC validation.
 
 ### `attendance_derived_state`
 -- Written by the Attendance Engine after every update. Never written by agents.

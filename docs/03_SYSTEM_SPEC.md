@@ -70,6 +70,8 @@ The system maintains a continuously updated, deterministic view of the student.
 
 Calculates current attendance and projects recovery. Operates only on VERIFIED records.
 
+> **`LATE` is reserved — DM-NEW-LATE01 (DECIDED):** `LATE` is unsupported as an input status in v1. The engine never generates `LATE` records, and a VERIFIED attendance calculation input must not contain `LATE`. If an imported or manually entered record contains `LATE`, the input MUST fail validation and be rejected — it must not become a VERIFIED record and must not be silently coerced to PRESENT or ABSENT. No grace-period rule exists in v1; institutional semantics deferred to post-BCREC validation.
+
 ### 3.1 Current Attendance Calculation
 `Attendance % = (Classes Attended / Classes Conducted) * 100`
 - Rounded to 2 decimal places.
