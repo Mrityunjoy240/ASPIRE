@@ -152,6 +152,8 @@ periodic scheduler
   → existing event-driven processing / RULE_ENGINE
 ```
 
+- **Local development topology (Supabase local-dev strategy — FROZEN):** Next.js and FastAPI run **natively** as development processes. The **Supabase CLI local stack** provides Postgres, Auth, Storage, Data API (PostgREST), and Studio (container runtime underneath). Do **not** create a second custom Supabase Docker Compose stack. **Migration authority:** `db/migrations/*.sql` remains the ONLY authoritative ASPIRE schema source, applied to the CLI's local Postgres by an ASPIRE-controlled migration runner with deterministic ordering — no second `supabase/migrations/*.sql` authority tree, and `supabase db reset` (which replays `supabase/migrations`) is NOT the authoritative migration mechanism.
+
 ---
 
 ## 5. Technology Decisions (ADR Summary)
@@ -215,7 +217,7 @@ ASPIRE/
 ├── pyproject.toml              ← Python project config (uv) — single package, no uv workspace
 ├── uv.lock                     ← Locked Python dependencies
 ├── db/
-│   ├── migrations/             ← Supabase SQL migrations — AUTHORITATIVE schema source (Bishesh owns)
+│   ├── migrations/             ← ASPIRE SQL migrations — AUTHORITATIVE schema source (Bishesh owns); applied to the Supabase CLI local Postgres via an ASPIRE-controlled runner
 │   └── seeds/                  ← BCREC seed data for dev/testing
 ├── evals/                      ← Evaluation harness (P0-16)
 └── tests/
@@ -248,5 +250,5 @@ ASPIRE/
 | ID | Question | Owner | Status |
 |---|---|---|---|
 | OQ-A01 | Should the API and Agents run as a single FastAPI process in v1 or separate services? | Mrityunjoy + Bishesh | ✅ RESOLVED — Single FastAPI application/process in v1 (Team Lead decision, 03 Oct 2026) |
-| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | ✅ RESOLVED — Docker Compose for local DB/infra; Next.js and FastAPI run natively in dev (Team Lead decision, 03 Oct 2026) |
+| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | ✅ RESOLVED — Next.js: native; FastAPI: native; Supabase (Postgres/Auth/Storage/Data API/Studio): Supabase CLI local stack; Docker Compose only for other local infra — no second custom Supabase Compose stack (Team Lead decision, 03 Oct 2026; Supabase local-dev strategy frozen) |
 | OQ-A03 | Shared `packages/schemas` — TypeScript only or Python Pydantic models too? | All | ✅ RESOLVED — TypeScript Zod for frontend, Python Pydantic for backend; compatibility via OpenAPI contract + tests (Team Lead decision, 03 Oct 2026) |

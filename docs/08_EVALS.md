@@ -68,6 +68,20 @@ All of these must return `403 Forbidden`. They may never return data.
 | RBAC-06 | Mentor | GET student state for non-mentee | 403 |
 | RBAC-07 | Faculty | GET course data for another faculty's course | 403 |
 
+**RLS integration fixtures (integration level — local Supabase):**
+
+These run against the **Supabase CLI local stack**: real test-user JWTs from local Supabase Auth, exercised through the local Data API/PostgREST (07 §2). Unit tests and FastAPI application-level authorization tests remain separate — see the level table in §1.
+
+| ID | Actor (real local JWT) | Action | Expected |
+|---|---|---|---|
+| RLS-01 | Student A | Data API read of Student B's `attendance_records` | Denied by policy — zero rows |
+| RLS-02 | Student A | Data API read of own `attendance_records` | Allowed — own rows only |
+| RLS-03 | Mentor | Data API read of assigned mentee attendance | Allowed — assigned mentees only |
+| RLS-04 | Mentor | Data API read of non-mentee attendance | Denied — zero rows |
+| RLS-05 | Unauthenticated | Data API request without JWT | 401 — rejected at boundary |
+
+Direct privileged SQLAlchemy/service connections are **not** accepted as proof that RLS works.
+
 ---
 
 ## 5. Agent Boundary Tests (Zero Tolerance)

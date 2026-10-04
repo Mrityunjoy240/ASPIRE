@@ -71,7 +71,7 @@
 - [ ] TypeScript strict mode enabled
 - [ ] Tailwind CSS working (renders a test div with bg-blue-500)
 - [ ] No secrets in any committed file (Constitution S-05)
-- [ ] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus placeholder comments for Supabase configuration (exact Supabase key names TBD — key-strategy decision pending; do not freeze)
+- [ ] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus the frozen Supabase env contract: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URI` (legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` names are NOT used; no `SUPABASE_SECRET_KEY` without a concrete privileged requirement)
 
 **OpenCode Prompt:**
 ```
@@ -87,8 +87,8 @@ Rules:
 - TypeScript strict: true in all tsconfig files.
 - No 'any' types.
 - Tailwind CSS installed and working.
-- Create .env.example with these keys documented but empty: DATABASE_URL, LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, EMBEDDING_MODEL.
-- Add placeholder comments for Supabase configuration keys marked "TBD — exact key names pending decision".
+- Create .env.example with these keys documented but empty: DATABASE_URL, LLM_PROVIDER, LLM_MODEL, LLM_API_KEY, EMBEDDING_MODEL, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_JWKS_URI.
+- Supabase key names are FROZEN (Supabase local-dev decision): only the three names above. Do NOT add SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY (legacy names) and do NOT add SUPABASE_SECRET_KEY (least privilege — only if a concrete privileged backend requirement exists).
 - Create .gitignore that excludes: node_modules, .env, .env.local, .next, dist, build.
 - Do NOT create any placeholder pages beyond the default layout and a single index page.
 - Do NOT add any external UI library (no shadcn, no MUI) yet — plain Tailwind only.
@@ -112,6 +112,7 @@ Verify: 'npm run build' must pass with zero TypeScript errors.
 
 **Acceptance Criteria:**
 - [ ] `.github/workflows/ci.yml` runs on every PR to `main`
+- [ ] CI is structured so the full integration/security stage (Supabase CLI local stack → apply `db/migrations` → Auth/JWKS/RLS integration tests) can be added when those tests exist; a plain PostgreSQL container may serve fast isolated/unit tests only — never a substitute for Supabase integration testing (frozen Supabase local-dev strategy)
 - [ ] Pipeline runs: install, type-check, lint, build
 - [ ] A failing type error causes the pipeline to fail
 - [ ] A passing build merges cleanly
@@ -161,7 +162,8 @@ Do NOT add any test runner yet — leave a placeholder 'npm run test' that exits
 ```
 
 **Acceptance Criteria:**
-- [ ] First SQL migration in `db/migrations/` applies cleanly to a local Postgres instance and enables `pgvector`
+- [ ] First SQL migration in `db/migrations/` applies cleanly to the local Supabase CLI Postgres instance and enables `pgvector`
+- [ ] Migrations are applied to the Supabase CLI local Postgres by an ASPIRE-controlled migration runner with deterministic ordering — no `supabase/migrations` authority tree; `supabase db reset` is NOT the migration mechanism (04 §4)
 - [ ] pgvector handled via the approved PostgreSQL pgvector integration for SQLAlchemy; `vector(1024)` preserved exactly as defined by `05_DATA_API_CONTRACTS.md` — no second embedding dimension, no alternative vector schema
 - [ ] SQLAlchemy 2.x async engine + session created from `DATABASE_URL` (env, never hardcoded)
 - [ ] psycopg 3 is the async driver; all Python dependencies pinned through `uv.lock`
@@ -189,6 +191,11 @@ Files to create:
 
 Rules:
 - NO Alembic — SQL migrations are the only schema/migration authority.
+- Local target database = the Supabase CLI local stack Postgres. Apply
+  db/migrations via an ASPIRE-controlled migration runner with deterministic
+  ordering. Do NOT create or maintain supabase/migrations as a second
+  authority; `supabase db reset` (replays supabase/migrations) is NOT the
+  authoritative migration mechanism.
 - SQLAlchemy models (added later) mirror docs/05_DATA_API_CONTRACTS.md for runtime
   access only; they are not a competing schema source.
 - Exact package versions pinned through uv.lock.
@@ -201,7 +208,7 @@ Rules:
   authorization (3) explicit row/scope filtering (4) audit/provenance where required.
 - No password storage; Supabase Auth owns credentials (07 §1).
 
-Verify: migration applies cleanly; async engine connects to local Postgres.
+Verify: migration applies cleanly; async engine connects to the Supabase CLI local Postgres.
 ```
 
 ---
@@ -346,6 +353,7 @@ Rules:
 - [ ] `GET /health` returns 200 with no token
 - [ ] No password storage, no custom token issuance, no refresh endpoint (07 §1)
 - [ ] Role resolution + queries use FastAPI's service DB connection with no JWT/`auth.uid()` context (07 §2 v1 strategy)
+- [ ] Local dev/test validates against the **local Supabase Auth JWKS endpoint** via `SUPABASE_JWKS_URI` (Supabase CLI local stack); production uses the production JWKS — validation stays asymmetric with identical rules in both (07 §1)
 - [ ] No credentials in source code (Constitution S-05)
 
 **OpenCode Prompt:**
@@ -358,9 +366,12 @@ Files to create:
 1. services/api/middleware/auth.py
    - require_role(allowed_roles: list[str]) FastAPI dependency:
      * Reads the "Authorization: Bearer <supabase_jwt>" header; missing → 401 UNAUTHENTICATED
-     * Validates the Supabase JWT asymmetrically:
-       - signature against the Supabase project's JWKS (no shared secret;
-         SUPABASE_JWT_SECRET must never be read or required; no API secret involved)
+      * Validates the Supabase JWT asymmetrically:
+        - signature against the Supabase project's JWKS (no shared secret;
+          SUPABASE_JWT_SECRET must never be read or required; no API secret involved).
+          JWKS URI comes from env SUPABASE_JWKS_URI — local dev/test: the local
+          Supabase Auth JWKS endpoint; production: the production project's JWKS.
+          Validation rules are identical in every environment (07 §1).
        - iss matches the Supabase project issuer
        - aud matches the expected audience of the chosen Supabase token configuration
        - exp in the future; nbf/iat validated where applicable
@@ -380,8 +391,11 @@ Rules:
 - Supabase Auth only: do NOT store/hash passwords, issue tokens, or build a
   refresh endpoint. Session lifetime follows configured Supabase Auth settings.
 - Do NOT invent custom JWT role claims. No users.role — it does not exist.
-- Supabase env key names NOT frozen — read config from environment; do not
-  document final names in .env.example. Never expose server secrets to a frontend.
+- Supabase env names are FROZEN (Supabase local-dev decision): backend reads
+  SUPABASE_JWKS_URI; frontend public config is NEXT_PUBLIC_SUPABASE_URL and
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Legacy SUPABASE_ANON_KEY /
+  SUPABASE_SERVICE_ROLE_KEY are not used; no SUPABASE_SECRET_KEY without a
+  concrete privileged requirement. Never expose server secrets to a frontend.
 - Constitution S-01: require_role must guard every protected route. S-05: no secrets.
 - Python type hints; typed JSON errors; no untyped request state.
 ```
@@ -1448,6 +1462,7 @@ Rules:
 - [ ] RBAC: student cannot fetch another student's data (403 expected, test must verify)
 - [ ] RBAC: unauthenticated request returns 401
 - [ ] Audit: every PATCH endpoint test verifies an audit_events row was created
+- [ ] RLS integration tests: real test-user JWTs obtained from local Supabase Auth, exercised against the local Data API/PostgREST — policy allow/deny verified per user/role; privileged service-connection queries are NOT accepted as RLS proof; FastAPI application-level authz tests remain separate (07 §2)
 
 **OpenCode Prompt:**
 ```

@@ -83,13 +83,19 @@ npm install
 
 # 3. Setup environment
 cp .env.example .env
-# Fill in your DATABASE_URL, LLM_API_KEY, Supabase config (key names TBD), etc.
+# Fill in your DATABASE_URL, LLM_API_KEY and the frozen Supabase keys:
+# NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_JWKS_URI
 
-# 4. Database setup
-# apply SQL migrations (db/migrations/*.sql) to the local database
+# 4. Local Supabase stack (Supabase CLI: Postgres/Auth/Storage/Data API/Studio)
+supabase start
+# Next.js and FastAPI run natively — no second Supabase Docker Compose stack
+
+# 5. Database setup
+# apply SQL migrations (db/migrations/*.sql) to the local Supabase Postgres
+# (ASPIRE-controlled runner — db/migrations is the only schema authority)
 # apply SQL seeds (db/seeds/*.sql)
 
-# 5. Run
+# 6. Run
 npm run dev --workspace=apps/web      # Web app: http://localhost:3000
 npm run dev --workspace=apps/mobile   # Mobile app: http://localhost:3001
 ```
