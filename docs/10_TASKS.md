@@ -20,7 +20,7 @@
 > [!CAUTION]
 > **CONSTITUTION E-01:** No task is coded without a Requirement ID linking to PRD or System Spec.
 > **CONSTITUTION E-06:** Target ≤300 changed lines per PR. Tasks are intentionally small.
-> **CONSTITUTION E-07:** Main branch must always be deployable. Feature branches only.
+> **CONSTITUTION E-07:** Main branch must always be deployable. Feature branches only. **Branch convention (frozen):** `main` is the canonical/default branch (`master` is not); use `feature/<task-id>-<short-name>`, `fix/<task-id>-<short-name>`, or `docs/<task-id>-<short-name>`; never do direct implementation work on `main` — PR review only.
 
 > [!NOTE]
 > **KNOWN STALE REFERENCES (Batch-3 cleanup):** `requireRole(...)` call-sites and the `packages/shared/src/auth/middleware.ts` path appearing in T-031, T-040, T-041, T-050, T-061, T-070 and T-071 prompts are stale. The current auth contract is T-011: FastAPI `require_role` in `services/api/middleware/auth.py` (identity = JWT `sub`; roles = `user_role_assignments`; `users.status = ACTIVE`). Do not treat these call-sites as current — they are to be removed during the Batch-3 TS→FastAPI task rewrite.
@@ -48,7 +48,7 @@
 **Status:** 🔒 BLOCKED — Pre-Coding Gate (AGENTS.md §1): no spec is 🟢 FROZEN, and there is no gate exception (Team Lead decision)
 **PRD Ref:** P0-12, P0-15
 **Spec Ref:** CONSTITUTION E-07
-**Branch:** `setup/project-scaffold`
+**Branch:** `feature/T-000-project-scaffold`
 **Depends on:** Nothing
 
 **What gets built:**
@@ -102,7 +102,7 @@ Verify: 'npm run build' must pass with zero TypeScript errors.
 **Status:** 🔒 BLOCKED on T-000
 **PRD Ref:** P0-16
 **Spec Ref:** CONSTITUTION E-07
-**Branch:** `setup/ci-pipeline`
+**Branch:** `feature/T-001-ci-pipeline`
 **Depends on:** T-000 ✅
 
 **What gets built:**
@@ -146,7 +146,7 @@ Do NOT add any test runner yet — leave a placeholder 'npm run test' that exits
 **Status:** 🔒 BLOCKED on T-000
 **PRD Ref:** P0-11, P0-13
 **Spec Ref:** 05_DATA_API_CONTRACTS.md — all tables
-**Branch:** `setup/database`
+**Branch:** `feature/T-002-database`
 **Depends on:** T-000 ✅
 
 **What gets built:**
@@ -218,7 +218,7 @@ Verify: migration applies cleanly; async engine connects to the Supabase CLI loc
 **Status:** 🔒 BLOCKED on T-000
 **PRD Ref:** P0-08, P0-06, P0-07
 **Spec Ref:** CONSTITUTION A-08, 04_ARCHITECTURE.md §4/§5 (DM-LLM01), 06_AGENT_SPEC.md §5
-**Branch:** `setup/llm-service`
+**Branch:** `feature/T-003-llm-service`
 **Depends on:** T-000 ✅
 
 **What gets built:**
@@ -311,7 +311,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-003
 **PRD Ref:** P0-08
 **Spec Ref:** 08_EVALS.md §13 (DM-LLM01), 06_AGENT_SPEC.md §5/§6
-**Branch:** `llm-mock-fixtures`
+**Branch:** `feature/T-004-llm-mock-fixtures`
 **Depends on:** T-003 ✅
 
 **What gets built:**
@@ -376,7 +376,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-002 (ORM/DB-access decision ✅ RESOLVED — DM-NEW-ORM01; implement only after T-002 lands and the Pre-Coding Gate in T-000 permits it)
 **PRD Ref:** P0-10, P0-12
 **Spec Ref:** 05_DATA_API_CONTRACTS.md Section 2
-**Branch:** `feature/auth-schema`
+**Branch:** `feature/T-010-auth-schema`
 **Depends on:** T-002 ✅
 
 **What gets built:**
@@ -428,7 +428,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-010
 **PRD Ref:** P0-12
 **Spec Ref:** 07_SECURITY_TRUST.md §1–2, 05_DATA_API_CONTRACTS.md §2 (user_role_assignments)
-**Branch:** `feature/auth-api`
+**Branch:** `feature/T-011-auth-api`
 **Depends on:** T-010 ✅
 
 **What gets built:**
@@ -499,7 +499,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-011
 **PRD Ref:** P0-16 (API contract + drift guard)
 **Spec Ref:** 04_ARCHITECTURE.md §4/§5 (DM-API01), 05_DATA_API_CONTRACTS.md intro (DM-API01), 08_EVALS.md Section 12
-**Branch:** `feature/openapi-contract`
+**Branch:** `feature/T-012-openapi-contract`
 **Depends on:** T-011 ✅
 
 **What gets built:**
@@ -566,7 +566,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-002
 **PRD Ref:** P0-13
 **Spec Ref:** 05_DATA_API_CONTRACTS.md Sections 1 & 3, 03_SYSTEM_SPEC.md Section 1
-**Branch:** `feature/institution-schema`
+**Branch:** `feature/T-020-institution-schema`
 **Depends on:** T-002 ✅
 
 **What gets built:**
@@ -635,7 +635,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-020
 **PRD Ref:** P0-02
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 3, 05_DATA_API_CONTRACTS.md Section 4
-**Branch:** `feature/attendance-engine`
+**Branch:** `feature/T-030-attendance-engine`
 **Depends on:** T-020 ✅
 
 **What gets built:**
@@ -724,7 +724,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-030, T-011
 **PRD Ref:** P0-02
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 3.2, 05_DATA_API_CONTRACTS.md Section 13 — ATTENDANCE
-**Branch:** `feature/what-if-api`
+**Branch:** `feature/T-031-what-if-api`
 **Depends on:** T-030 ✅, T-011 ✅
 
 **What gets built:**
@@ -782,7 +782,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-020
 **PRD Ref:** P0-03
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 4, 05_DATA_API_CONTRACTS.md Section 5
-**Branch:** `feature/assessment-engine`
+**Branch:** `feature/T-032-assessment-engine`
 **Depends on:** T-020 ✅
 
 > [!WARNING]
@@ -853,7 +853,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-010
 **PRD Ref:** P0-11
 **Spec Ref:** CONSTITUTION S-04, 03_SYSTEM_SPEC.md Section 13, 05_DATA_API_CONTRACTS.md Section 12
-**Branch:** `feature/audit-trail`
+**Branch:** `feature/T-033-audit-trail`
 **Depends on:** T-010 ✅
 
 **What gets built:**
@@ -923,7 +923,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-031, T-032, T-033
 **PRD Ref:** P0-01
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 2, 05_DATA_API_CONTRACTS.md Section 13 — STUDENT STATE
-**Branch:** `feature/student-state-api`
+**Branch:** `feature/T-040-student-state-api`
 **Depends on:** T-031 ✅, T-032 ✅, T-033 ✅
 
 **What gets built:**
@@ -972,7 +972,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-033; OQ-SS02 resolved — DM-SS02 (Option A: OVERDUE derived, not persisted)
 **PRD Ref:** P0-05
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 5, 05_DATA_API_CONTRACTS.md Section 6
-**Branch:** `feature/task-engine`
+**Branch:** `feature/T-041-task-engine`
 **Depends on:** T-033 ✅
 
 **What gets built:**
@@ -1044,7 +1044,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-033, T-020
 **PRD Ref:** P0-14
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 11, 02_USER_JOURNEYS.md Section 5.1, 05_DATA_API_CONTRACTS.md Section 11
-**Branch:** `feature/ingestion-attendance`
+**Branch:** `feature/T-050-ingestion-attendance`
 **Depends on:** T-033 ✅, T-020 ✅
 
 **What gets built:**
@@ -1134,7 +1134,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-041, T-033
 **PRD Ref:** P0-08, P0-09
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 10, 05_DATA_API_CONTRACTS.md Section 7
-**Branch:** `feature/intervention-schema`
+**Branch:** `feature/T-060-intervention-schema`
 **Depends on:** T-041 ✅, T-033 ✅
 
 **What gets built:**
@@ -1198,7 +1198,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-060, T-011; OQ-SS03 resolved — DM-SS03 (Option A: frozen in 03 §6.2)
 **PRD Ref:** P0-09
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 6, 05_DATA_API_CONTRACTS.md Section 13 — MENTOR QUEUE
-**Branch:** `feature/mentor-queue-api`
+**Branch:** `feature/T-061-mentor-queue-api`
 **Depends on:** T-060 ✅, T-011 ✅
 
 **What gets built:**
@@ -1266,7 +1266,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-041, T-060
 **PRD Ref:** P0-04, P0-05, P0-09
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 8.3 (DM-AG03), Section 10.2, 08_EVALS.md Section 11
-**Branch:** `feature/time-scheduler`
+**Branch:** `feature/T-062-time-scheduler`
 **Depends on:** T-041 ✅, T-060 ✅
 
 **What gets built:**
@@ -1333,7 +1333,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-033, T-020
 **PRD Ref:** P0-06
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 7, 05_DATA_API_CONTRACTS.md Section 8
-**Branch:** `feature/learning-workspace`
+**Branch:** `feature/T-070-learning-workspace`
 **Depends on:** T-033 ✅, T-020 ✅
 
 **What gets built:**
@@ -1397,7 +1397,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-070, T-003
 **PRD Ref:** P0-06, P0-07
 **Spec Ref:** 03_SYSTEM_SPEC.md Section 7.2, 05_DATA_API_CONTRACTS.md Section 13 — LEARNING WORKSPACE
-**Branch:** `feature/quiz-generation`
+**Branch:** `feature/T-071-quiz-generation`
 **Depends on:** T-070 ✅, T-003 ✅
 
 **What gets built:**
@@ -1476,7 +1476,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-061, T-040, T-003
 **PRD Ref:** P0-08
 **Spec Ref:** CONSTITUTION A-01 through A-06, 03_SYSTEM_SPEC.md Section 8
-**Branch:** `feature/supervisor-agent`
+**Branch:** `feature/T-080-supervisor-agent`
 **Depends on:** T-061 ✅, T-040 ✅, T-003 ✅
 
 **What gets built:**
@@ -1546,7 +1546,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-040
 **PRD Ref:** P0-15
 **Spec Ref:** 02_USER_JOURNEYS.md Section 1.1 Steps 1-3
-**Branch:** `feature/student-home`
+**Branch:** `feature/T-090-student-home`
 **Depends on:** T-040 ✅
 
 **What gets built:**
@@ -1605,7 +1605,7 @@ Rules:
 **Status:** 🔒 BLOCKED on T-030, T-011
 **PRD Ref:** P0-16
 **Spec Ref:** CONSTITUTION E-05, 01_PRD.md Section 6.3
-**Branch:** `feature/test-harness`
+**Branch:** `feature/T-100-test-harness`
 **Depends on:** T-030 ✅, T-011 ✅
 
 **What gets built:**
