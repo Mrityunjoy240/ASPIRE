@@ -231,6 +231,7 @@ A PR addresses one task. One feature. One fix.
 PRs that contain multiple unrelated changes are split before review.
 **Target: ≤300 changed lines per PR.** Larger changes require explicit justification and should normally be split.
 Exceptions (do not count toward the limit): generated files, DB migrations, lockfiles, and unavoidable mechanical/scaffold changes.
+**Scope:** the ≤300 target applies to implementation (code) PRs. Docs-only cross-document synchronization that propagates already-approved decisions across contracts/tasks is one concern and is exempt from the numeric limit — it must be labeled `docs:` and justified in the PR/commit body.
 
 ### E-07 — Main Branch is Always Deployable
 `main` must remain in a buildable and deployable state at all times.

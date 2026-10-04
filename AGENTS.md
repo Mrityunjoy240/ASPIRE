@@ -37,7 +37,7 @@ If any condition is not met, stop and ask the team lead.
 
 - A task ID from `10_TASKS.md`
 - A spec reference (e.g., `Implements: 03_SYSTEM_SPEC.md §3.2`)
-- ≤ 300 changed lines (excluding migrations, lockfiles, generated files)
+- ≤ 300 changed lines (excluding migrations, lockfiles, generated files; docs-only sync commits propagating approved decisions are exempt per CONSTITUTION E-06)
 - Passing tests for every deterministic function added
 - No new TODO or FIXME comments without a linked task ID
 
