@@ -141,7 +141,7 @@ Tracing the "Student S-204 at risk" scenario through the full stack.
 - **API → Rule Engines:** Direct in-process function calls. Rule engines are pure Python modules, not microservices. No HTTP between them.
 - **API → Agent Orchestrator:** Direct in-process call in v1. (Can be extracted to a queue later).
 - **Agents → Database:** Agents NEVER call Supabase/PostgreSQL directly. They call typed FastAPI tool endpoints which enforce RBAC.
-- **Agents → LLM:** Agents call `LLMService` class only. `LLMService` calls OpenRouter.
+- **Agents → LLM (DM-LLM01 — FROZEN):** The call path is `Agent → internal LLMService → OpenRouter`. Agents call `LLMService` only — **no agent calls OpenRouter or any model provider directly.** The service exposes exactly two modes — **`LIVE`** and **`MOCK`** (no other production modes are invented). `MOCK` responses come from explicit deterministic fixtures and are for tests/evaluation only; mock mode must never silently become a production answer source. **Failure boundary:** `LLMService` distinguishes timeout, transient provider/API failure, rate limit, invalid structured output, exhausted retry/failover, and unavailable service. Transient failures and rate limits get **one bounded retry with bounded backoff** — never an unbounded retry loop. OpenRouter provider-level failover may operate normally, but ASPIRE **never silently switches to a different application-selected model** — provider failover and model fallback are different mechanisms; model fallback requires a separate frozen decision. Every structured response is schema-validated before business logic consumes it; invalid/partial/malformed output is rejected — never accepted partially, coerced, or completed with invented fields.
 - **No agent-to-agent HTTP calls.** All agent coordination goes through LangGraph graph state.
 - **Time-based scheduler (DM-AG03 — FROZEN):** The application runs one scheduler evaluation at startup, then every **5 minutes**. Execution is idempotent (missed/delayed cycles recover from current DB state; no duplicate logical events) and the scheduler **never directly mutates business state** — it never calls agents/LLMs and never persists `OVERDUE` (DM-SS02).
 
@@ -171,8 +171,9 @@ periodic scheduler
 | Python tooling | uv + root `pyproject.toml` + `uv.lock` | Fast, reproducible Python envs. Single package in v1 — no uv workspace. |
 | **DM-NEW-ORM01 — ORM / DB access = ✅ DECIDED** | SQLAlchemy 2.x (async) + psycopg 3 + repository/service layer | SQL migrations in `db/migrations/` are the **authoritative schema source**; SQLAlchemy models mirror `05_DATA_API_CONTRACTS.md` for runtime access only (never a competing schema source). **Prisma removed.** No Alembic as a second schema/migration authority. Exact versions pinned via `uv.lock`. |
 | **DM-API01 — API contract = ✅ DECIDED** | FastAPI routes + Pydantic → generated `contracts/openapi.json` → TS types | Single canonical committed artifact; no manual edits; no duplicate contract files; CI fails on drift. |
+| **DM-LLM01 — LLM gateway & failure behavior = ✅ DECIDED** | `Agent → internal LLMService → OpenRouter`; modes `LIVE` / `MOCK` | No direct agent→provider calls; deterministic MOCK fixtures for tests only; one bounded retry (transient/rate-limit) with bounded backoff; structured-output validation before any business use; controlled unavailable result; per-attempt audit metadata. No silent cross-model fallback (evaluation still selects the production model). |
 
-> The production LLM model is **not frozen** until evaluation selects one. Development and CI must support **mock/disabled LLM** operation (`LLM_PROVIDER=mock`) so the platform runs without an LLM key.
+> The production LLM model is **not frozen** until evaluation selects one. Development and CI must support **mock/disabled LLM** operation (`LLM_PROVIDER=mock`, the `MOCK` mode per DM-LLM01) so the platform runs without an LLM key.
 
 ---
 

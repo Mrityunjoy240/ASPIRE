@@ -278,11 +278,16 @@ class LLMService:
 
 **Rules:**
 - Provider (OpenRouter), model, and API key are read from environment config only.
+- **Modes (DM-LLM01 — FROZEN):** exactly two — `LIVE` and `MOCK`. No other production modes are invented. `MOCK` responses come from explicit deterministic fixtures and are for tests/evaluation only — mock mode must never silently become a production answer source. (Dev/CI convention: `LLM_PROVIDER=mock` → `MOCK`, 04 §5.)
+- **Failure handling (frozen):** the service distinguishes `timeout`, transient provider/API failure, `rate limit`, invalid structured output, exhausted retry/failover, and unavailable LLM service. For transient failures and rate limits: **one bounded retry, bounded backoff** — never an unbounded retry loop. OpenRouter provider-level failover may operate normally. The service **never silently switches to a different application-selected model** — provider failover ≠ model fallback; model fallback requires a separate frozen decision (the production model stays evaluation-selected).
+- **Structured-output safety (frozen):** every structured response is validated against the expected schema **before business logic consumes it**. Invalid/partial/malformed output is rejected — never accepted partially, never coerced into a valid business object, never completed with invented fields. OpenRouter responses/errors are checked explicitly — HTTP success does not imply a valid generated result. Business state is never mutated from an unvalidated LLM response.
+- **Controlled degradation (frozen):** when the LLM remains unavailable after the allowed retry/failover path, the service returns a controlled unavailable result and the deterministic core continues (§6). No failure path may invent academic facts, alter verified attendance/assessment facts, fabricate an AI plan or approval, bypass human approval, silently change model/provider semantics, or persist invalid LLM output.
 - All calls are logged with:
   `caller_agent`, `model_used`, `input_token_count`, `output_token_count`, `latency_ms`,
   `request_id`, `prompt_version`, `response_schema_version`
+- **Audit metadata (frozen):** every LLM attempt additionally records `request_id`, `prompt_version`, `response_schema_version`, `model`, `provider`, `outcome`, `failure_reason`, `latency`, `created_at`. Only the minimum context required for the task is sent — no unnecessary student identifiers or personal data (07 §5).
 - Never log raw prompt content in production. Log only metadata.
-- If the provider is unavailable, raise `LLMUnavailableError`. The caller handles graceful degradation.
+- If the provider is unavailable after the allowed bounded retry/failover path, raise `LLMUnavailableError`. The caller handles graceful degradation.
 
 ---
 
@@ -292,11 +297,11 @@ Constitution P-02: The deterministic core must remain operational when the LLM i
 
 | Agent | LLM unavailable behavior |
 |---|---|
-| Supervisor | Deterministic routing continues. Events are still consumed and routed. No LLM needed. |
-| Attendance Agent | Risk warning + exact calculation (from engine) shown to student. Natural-language explanation unavailable. Plan proposal blocked. Case put in `PENDING_LLM_AVAILABLE` state. |
-| Learning Agent | Quiz generation unavailable. Source retrieval/search can continue. Student shown "Study guide unavailable — try again later". |
-| Intervention Agent | Deterministic follow-up evaluation and state transitions continue. Replan proposals blocked. |
-| LLM Service | Raises `LLMUnavailableError` immediately. Does not retry without explicit policy. |
+| Supervisor | **Routing stays deterministic — event routing never depends on an LLM response.** LLM unavailability must NOT prevent deterministic event routing. Events are still consumed and routed. No LLM needed. |
+| Attendance Agent | Deterministic attendance calculations and risk evaluation continue normally. LLM-dependent explanation/plan language is unavailable. Do NOT fabricate an AI-generated recovery plan — plan proposal is blocked; case status is unchanged (no failure-only lifecycle transition invented, DM-LLM01). |
+| Learning Agent | RAG authorization/source rules unchanged. Quiz generation unavailable: **no quiz is created, no fake/generated substitute is stored**, user receives a controlled unavailable state. Retrieval/search may continue. Do not bypass RAG authorization or evidence requirements. |
+| Intervention Agent | Deterministic case-state handling continues only where transition preconditions are satisfied. **A valid LLM proposal is required before an AI-generated plan enters its proposal/approval stage** — LLM unavailability must NOT be represented as a successful proposal, approval, or activation. No new case lifecycle transition is invented for the failure path. |
+| LLM Service | Raises `LLMUnavailableError` after the allowed bounded retry/failover path (one bounded retry for transient/rate-limit with bounded backoff — never unbounded). Returns a controlled unavailable result. |
 
 ---
 

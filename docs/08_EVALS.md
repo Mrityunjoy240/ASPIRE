@@ -206,3 +206,24 @@ The time-based scheduler (periodic, every 5 minutes — 03_SYSTEM_SPEC §8.3) mu
 | API-02 | Regenerate and compare against committed `contracts/openapi.json` | Zero difference — committed artifact matches generated output |
 | API-03 | CI regenerates the document while the committed artifact has been modified | CI FAIL (drift detected) |
 | API-04 | Frontend type generation | TypeScript types derive from the canonical `contracts/openapi.json` only — never hand-written endpoint schemas |
+
+---
+
+## 13. LLM Mock / Failure Fixtures (DM-LLM01)
+
+`MOCK` responses come from explicit deterministic fixtures (06 §5). The evaluation suite MUST prove that deterministic academic calculations still work with the LLM disabled. Invalid structured output is always rejected — never partially accepted, coerced, or completed with invented fields.
+
+| ID | Fixture | Expected Output |
+|---|---|---|
+| LLM-01 | Successful structured response | Schema-validated output accepted; business logic consumes it normally |
+| LLM-02 | Timeout | Controlled timeout failure; one bounded retry allowed; controlled unavailable result if exhausted — no unbounded loop |
+| LLM-03 | Transient provider failure | One bounded retry with bounded backoff → success or controlled unavailable |
+| LLM-04 | Rate limit | One bounded retry with bounded backoff — never an unbounded retry loop |
+| LLM-05 | Invalid structured output | Rejected at schema validation before business logic — never partially accepted, coerced, or patched with invented fields |
+| LLM-06 | Exhausted failure (retries/failover) | Controlled unavailable result after the allowed retry/failover path; audit metadata records `outcome` + `failure_reason` |
+| LLM-07 | Supervisor deterministic routing while LLM unavailable | Event routing continues deterministically — no LLM dependency, no blocked routing |
+| LLM-08 | Attendance deterministic calculation while LLM unavailable | Calculations and risk evaluation continue; no fabricated AI recovery plan |
+| LLM-09 | Learning quiz-generation unavailable | No quiz created, no fake substitute stored; controlled unavailable state; RAG rules intact |
+| LLM-10 | Intervention plan unavailable | No proposal/approval/activation represented; case state uncorrupted; preconditions still enforced |
+
+LLM-01…LLM-06 are exercised at the gateway level (T-004); LLM-07…LLM-10 are exercised within their owning agent test suites per the 06 §6 degradation contract.

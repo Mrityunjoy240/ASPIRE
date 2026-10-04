@@ -139,7 +139,7 @@ Every privileged write must produce an `audit_log` record (see `05_DATA_API_CONT
 **Rules:**
 - Audit log is append-only. No row in `audit_log` is ever updated or deleted.
 - No PII (email, full name) in the `previous_state` / `new_state` JSON — reference by UUID only.
-- No raw LLM prompt content in audit logs. Log only metadata (model, token count, agent_name).
+- No raw LLM prompt content in audit logs. Log only metadata (model, token count, agent_name). Every LLM attempt additionally records the DM-LLM01 audit metadata: `request_id`, `prompt_version`, `response_schema_version`, `model`, `provider`, `outcome`, `failure_reason`, `latency`, `created_at`.
 
 ---
 
@@ -148,7 +148,7 @@ Every privileged write must produce an `audit_log` record (see `05_DATA_API_CONT
 - **Student data is confidential by default.** No student's data is accessible to another student.
 - Faculty can only see data for their assigned course runs. Cross-course visibility requires an explicit role grant.
 - HOD sees aggregates only, not individual student confidential records by default.
-- **No student data is sent to the LLM provider in a way that includes PII** (name, roll number, email). Strip or anonymize before constructing LLM prompts. The LLM receives: `student_id` (UUID), academic metrics, and de-identified evidence.
+- **No student data is sent to the LLM provider in a way that includes PII** (name, roll number, email). Strip or anonymize before constructing LLM prompts. The LLM receives: `student_id` (UUID), academic metrics, and de-identified evidence — and **only the minimum context required for the task** (DM-LLM01): unnecessary student identifiers or personal data must never be sent. Existing auth/RBAC rules are unchanged by LLM availability or failure — degraded mode never bypasses authentication, role checks, or document `access_scope`.
 - Uploaded documents stay in Supabase Storage. Only the student and authorized roles may access the storage URL.
 
 ---

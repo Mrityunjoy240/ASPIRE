@@ -214,63 +214,155 @@ Verify: migration applies cleanly; async engine connects to the Supabase CLI loc
 
 ---
 
-### T-003 — LLMService Abstraction Stub
+### T-003 — LLMService Abstraction (Internal Gateway)
 **Status:** 🔒 BLOCKED on T-000
 **PRD Ref:** P0-08, P0-06, P0-07
-**Spec Ref:** CONSTITUTION A-08
+**Spec Ref:** CONSTITUTION A-08, 04_ARCHITECTURE.md §4/§5 (DM-LLM01), 06_AGENT_SPEC.md §5
 **Branch:** `setup/llm-service`
 **Depends on:** T-000 ✅
 
 **What gets built:**
-- Internal `LLMService` interface — the ONLY way any code calls an LLM
-- OpenRouter implementation (reads from env)
+- Internal `LLMService` in `services/llm/` — the ONLY way any code calls an LLM (`Agent → internal LLMService → OpenRouter`; no direct agent→provider calls)
+- OpenRouter implementation (reads from env) + deterministic `MOCK` mode for tests/evaluation
+- Frozen failure policy: bounded retries, structured-output validation, controlled unavailable result, audit metadata (DM-LLM01)
 - No agent or feature code yet — just the abstraction layer
 
 **Files to create:**
 ```
-/packages/shared/src/llm/types.ts       ← LLMService interface
-/packages/shared/src/llm/openrouter.ts  ← OpenRouter implementation
-/packages/shared/src/llm/index.ts       ← factory export
+services/llm/llm_service.py   ← LLMService gateway: LIVE/MOCK modes, retry policy, schema validation, audit metadata
+services/llm/openrouter.py    ← OpenRouter transport (env: LLM_API_KEY, LLM_MODEL, EMBEDDING_MODEL)
+services/llm/mock.py          ← MOCK mode — explicit deterministic fixture responses
 ```
 
 **Acceptance Criteria:**
-- [ ] No agent or feature code imports from OpenRouter/OpenAI directly — only through LLMService
-- [ ] Provider and model are read from env (`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`)
+- [ ] No agent or feature code imports OpenRouter/OpenAI or any LLM SDK directly — all calls go through `LLMService` (04 §4, DM-LLM01)
+- [ ] Exactly two modes: `LIVE` and `MOCK`. `MOCK` responses come from explicit deterministic fixtures, are for tests/evaluation only, and never silently become a production answer source. No other production modes invented (dev/CI convention: `LLM_PROVIDER=mock` → `MOCK`, 04 §5)
+- [ ] Provider and model are read from env (`LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`); the production model is NOT chosen here — it remains evaluation-selected
+- [ ] Controlled failures distinguished: timeout, transient provider/API failure, rate limit, invalid structured output, exhausted retry/failover, unavailable service
+- [ ] Transient failures and rate limits: **one bounded retry with bounded backoff — no unbounded retry loop**. OpenRouter provider-level failover may operate normally; no silent application-level model switching (provider failover ≠ model fallback; model fallback needs a separate frozen decision)
+- [ ] Every structured response is schema-validated before business logic consumes it; invalid/partial/malformed output rejected — no coercion, no invented fields, no mutation from unvalidated output; OpenRouter responses/errors checked explicitly (HTTP success ≠ valid result)
+- [ ] After the allowed retry/failover path: controlled unavailable result + typed `LLMUnavailableError`
+- [ ] Audit metadata on every attempt: `request_id`, `prompt_version`, `response_schema_version`, `model`, `provider`, `outcome`, `failure_reason`, `latency`, `created_at`; minimum-necessary context only (07 §5); no raw prompt logging
 - [ ] Interface has: `complete(prompt, options)` and `embed(text)` methods
-- [ ] If provider is unavailable, throws a typed `LLMUnavailableError` (not a raw error)
-- [ ] TypeScript strict — no `any`
+- [ ] Python type hints — no untyped values; no hardcoded API keys or model names
 
 **OpenCode Prompt:**
 ```
-Create the LLMService abstraction layer for ASPIRE. This is the ONLY way any code in the project calls an LLM. No other file may import from openai, openrouter, or any LLM SDK directly.
+Create the LLMService internal gateway for ASPIRE (DM-LLM01 — FROZEN).
 
-Create in packages/shared/src/llm/:
+Reference:
+- docs/04_ARCHITECTURE.md Section 4 (Agents → LLM) and Section 5 (ADR DM-LLM01)
+- docs/06_AGENT_SPEC.md Section 5 (LLM Service rules)
+- docs/07_SECURITY_TRUST.md Section 5 (minimum-necessary context)
 
-1. types.ts — Define:
-   - Interface LLMService with methods:
-     * complete(messages: LLMMessage[], options?: LLMOptions): Promise<LLMResponse>
-     * embed(text: string): Promise<number[]>
-   - Type LLMMessage: { role: 'system' | 'user' | 'assistant', content: string }
-   - Type LLMOptions: { temperature?: number, maxTokens?: number, model?: string }
-   - Type LLMResponse: { content: string, model: string, usage: { inputTokens: number, outputTokens: number } }
-   - Class LLMUnavailableError extends Error (typed error for when provider is down)
+This is the ONLY way any code in the project calls an LLM.
+Call path: Agent → internal LLMService → OpenRouter.
+No agent or feature code may import OpenRouter, OpenAI, or any LLM SDK directly.
 
-2. openrouter.ts — Implements LLMService:
-   - Reads: LLM_API_KEY, LLM_MODEL from process.env
+Create in services/llm/:
+
+1. llm_service.py — LLMService gateway with methods:
+   - complete(prompt, options, response_schema) -> dict
+   - embed(text) -> list[float]
+   Exactly two modes: LIVE and MOCK (no other production modes).
+   - LIVE: calls OpenRouter via openrouter.py
+   - MOCK: returns explicit deterministic fixtures from mock.py
+     (tests/evaluation only — never silently a production answer source)
+   Failure policy (frozen):
+   - Distinguish: timeout, transient provider failure, rate limit, invalid
+     structured output, exhausted retry/failover, unavailable service.
+   - Transient/rate-limit: ONE bounded retry with bounded backoff.
+     Never an unbounded retry loop.
+   - OpenRouter provider-level failover may operate normally.
+     Never silently switch to a different application-selected model
+     (provider failover != model fallback; model fallback is NOT decided here).
+   - Validate every structured response against response_schema BEFORE
+     returning it. Reject invalid/partial/malformed output — never coerce,
+     never invent fields. Check responses/errors explicitly; HTTP success
+     does not imply a valid generated result.
+   - After the allowed retry/failover path: raise typed LLMUnavailableError
+     and return a controlled unavailable result to the caller.
+   Audit metadata on every attempt: request_id, prompt_version,
+   response_schema_version, model, provider, outcome, failure_reason,
+   latency, created_at. Never log raw prompt content.
+
+2. openrouter.py — LIVE transport:
+   - Reads: LLM_API_KEY, LLM_MODEL from environment
    - Base URL: https://openrouter.ai/api/v1
-   - Uses fetch (no SDK) for portability
-   - If fetch fails or returns non-200: throw LLMUnavailableError
-   - For embed(): calls /api/v1/embeddings with model from EMBEDDING_MODEL env var
+   - Uses httpx (async) — no vendor SDK
+   - embed(): calls /api/v1/embeddings with model from EMBEDDING_MODEL
 
-3. index.ts — Factory:
-   - export function getLLMService(): LLMService
-   - Reads LLM_PROVIDER from env. Currently only 'openrouter' is supported.
-   - Throws clear error if LLM_PROVIDER is not set or not recognized.
+3. mock.py — MOCK fixtures:
+   - Explicit deterministic fixtures (success, timeout, transient failure,
+     rate limit, invalid structured output, exhausted failure) for tests.
 
 Rules:
-- TypeScript strict, no 'any'.
-- No hardcoded API keys, URLs (beyond the openrouter base URL), or model names.
-- Constitution A-08: This is an architectural law — document it clearly in a comment at the top of index.ts.
+- Production model stays evaluation-selected — do NOT pick a final model.
+- No hardcoded API keys, URLs (beyond the OpenRouter base URL), or model names.
+- Minimum-necessary context only: no unnecessary student identifiers/PII
+  (07 §5). Auth/RBAC semantics unchanged.
+- Python type hints; no untyped values. Document A-08 (architectural law)
+  clearly at the top of llm_service.py.
+```
+
+---
+
+### T-004 — LLM Mock Fixtures + Failure-Policy Tests
+**Status:** 🔒 BLOCKED on T-003
+**PRD Ref:** P0-08
+**Spec Ref:** 08_EVALS.md §13 (DM-LLM01), 06_AGENT_SPEC.md §5/§6
+**Branch:** `llm-mock-fixtures`
+**Depends on:** T-003 ✅
+
+**What gets built:**
+- Deterministic MOCK fixture set for the LLMService failure policy (08 §13)
+- Failure-policy tests proving the frozen retry/backoff/validation rules
+- Evaluation proof that deterministic academic calculations still run with the LLM disabled
+
+**Acceptance Criteria:**
+- [ ] Deterministic mock fixtures exist for: successful structured response, timeout, transient provider failure, rate limit, invalid structured output, exhausted failure (LLM-01…LLM-06)
+- [ ] Agent-level fixtures defined and exercisable: Supervisor deterministic routing while LLM unavailable, Attendance deterministic calculation while LLM unavailable, Learning quiz-generation unavailable, Intervention plan unavailable without corrupting case state (LLM-07…LLM-10, exercised within their owning agent test suites per 06 §6)
+- [ ] Failure-policy tests prove: one bounded retry + bounded backoff for transient/rate-limit; no unbounded retry loop; invalid structured output rejected (never partially accepted or coerced); controlled unavailable result after exhausted retry/failover (09 EC-AG-07…EC-AG-10)
+- [ ] Evaluation suite proves deterministic academic calculations (attendance/assessment engines) still work with the LLM disabled / in MOCK mode
+- [ ] Audit metadata recorded on every attempt, including failure outcomes (`outcome`, `failure_reason`)
+- [ ] MOCK mode never silently becomes a production answer source — fixtures are wired only for tests/evaluation
+- [ ] All fixtures LLM-01…LLM-10 in `08_EVALS.md` §13 pass
+
+**OpenCode Prompt:**
+```
+Build the LLM mock fixtures and failure-policy test suite for ASPIRE (DM-LLM01).
+
+Reference:
+- docs/08_EVALS.md Section 13 (LLM-01…LLM-10)
+- docs/06_AGENT_SPEC.md Sections 5 and 6
+- docs/09_EDGE_CASES.md Category 4 (EC-AG-07…EC-AG-14)
+
+1. Extend services/llm/mock.py with explicit deterministic fixtures for:
+   - successful structured response
+   - timeout
+   - transient provider failure
+   - rate limit
+   - invalid structured output
+   - exhausted failure
+2. Write failure-policy tests against LLMService proving:
+   - one bounded retry with bounded backoff for transient/rate-limit —
+     no unbounded retry loop
+   - invalid structured output is rejected before business logic —
+     never partially accepted, coerced, or completed with invented fields
+   - controlled unavailable result after the allowed retry/failover path
+   - audit metadata recorded on every attempt incl. outcome/failure_reason
+3. Add tests for agent-level fixtures (LLM-07…LLM-10) wired into their owning
+   agent test suites: deterministic routing/calculations continue while the
+   LLM is unavailable; no fabricated plans/quizzes/proposals; case state
+   uncorrupted.
+4. Prove deterministic academic calculations still run with the LLM disabled
+   (MOCK mode) — the evaluation suite must show engines unaffected.
+
+Rules:
+- MOCK is for tests/evaluation only — never a production answer source.
+- Do not change RAG authorization rules, case-state transitions, or invent
+  academic statuses.
+- Do not choose a production model. No cross-model fallback.
 ```
 
 ---
@@ -1580,6 +1672,7 @@ T-000 (Scaffold)
   │           └── T-050 (Ingestion)          │
   └── T-003 (LLMService)                     │
                                              │
+T-003 → T-004 (LLM Mock + Fixtures)
 T-011 + T-001 → T-012 (OpenAPI Contract)
 T-031 + T-032 + T-033 → T-040 (Student State API)
 T-033 + T-020 → T-041 (Task Engine)
