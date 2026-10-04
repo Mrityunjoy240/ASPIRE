@@ -781,12 +781,12 @@ Rules:
 ### T-032 — Assessment Schema + Assessment Engine
 **Status:** 🔒 BLOCKED on T-020
 **PRD Ref:** P0-03
-**Spec Ref:** 03_SYSTEM_SPEC.md Section 4, 05_DATA_API_CONTRACTS.md Section 5
+**Spec Ref:** 03_SYSTEM_SPEC.md Section 4 / §4.0 (DM-ASSESS01), 05_DATA_API_CONTRACTS.md Section 6, 08_EVALS.md Section 3
 **Branch:** `feature/T-032-assessment-engine`
 **Depends on:** T-020 ✅
 
-> [!WARNING]
-> OQ-06 sub-component split is PARTIALLY RESOLVED. Use the schema as defined in 05_DATA_API_CONTRACTS.md. Weightage columns may need updating when Bishesh confirms exact CIA sub-split.
+> [!NOTE]
+> OQ-06 = RESOLVED — DM-ASSESS01 (configuration-driven assessment structure). Use the schema as defined in 05_DATA_API_CONTRACTS.md §6; scheme configuration follows the versioned `institution_rules` pattern (05 §12, built by T-020). Never hardcode universal CIA/PCIA/ESE weights in engine logic — the BCREC theory template (40/40/60) is configuration, not code.
 
 **What gets built:**
 - SQL migration + SQLAlchemy mirror models for `assessment_components`, `assessment_submissions` (05 — Assessment Tables; authoritative — DM-NEW-ORM01)
@@ -800,14 +800,33 @@ Rules:
 - [ ] Trend requires minimum 6 GRADED assessments (returns `TREND_NOT_ESTABLISHED` otherwise)
 - [ ] Trend uses 15% relative decline threshold
 - [ ] Constitution D-01 + D-02: NULL ≠ 0, PENDING ≠ FAILED
+- [ ] Configuration-driven aggregation: component contributions and totals computed from the active assessment-scheme configuration (institution/programme/course/term scope) — no universal CIA/PCIA/ESE weighting hardcoded anywhere in engine logic (DM-ASSESS01)
+- [ ] PCIA/PESE weights read from the applicable assessment-rule version — no universal PCIA/PESE formula implemented
+- [ ] BCREC AIML theory template (CIA-1=40, CIA-2=40, ESE=60; Class Test 25 + Assignment 10 + Attendance 5 each) seeded/documented as a versioned configuration — never as engine constants (03 §4.0)
+- [ ] Scheme resolution is versioned/effective-dated via `institution_rules` (`effective_from`/`effective_to`/`version`) — alternate schemes and boundary instants resolve deterministically
+- [ ] All fixtures ASS-06…ASS-12 in `08_EVALS.md` §3 pass
 
 **OpenCode Prompt:**
 ```
 Build the Assessment Engine for ASPIRE.
 
 Reference:
-- docs/03_SYSTEM_SPEC.md Section 4
-- docs/05_DATA_API_CONTRACTS.md Section 5
+- docs/03_SYSTEM_SPEC.md Section 4 (incl. §4.0 — DM-ASSESS01)
+- docs/05_DATA_API_CONTRACTS.md Section 6 (Assessment Tables)
+
+PART 0 — Configuration model (DM-ASSESS01 — FROZEN):
+- The assessment scheme is CONFIGURATION DATA, never engine logic.
+  Scheme entries (component hierarchy, full marks, weights, applicability,
+  effective dates/version, scope) follow the versioned institution_rules
+  pattern (05 §12) built by T-020; assessment_components materializes
+  components per course run (05 §6).
+- Seed/document the BCREC CSE(AIML) 5th-semester theory template as a
+  versioned configuration: CIA-1=40 (Class Test 25, Assignment 10,
+  Attendance 5), CIA-2=40 (same sub-weights), ESE=60, Total=100
+  (03 §4.0). This is an example configuration — NOT a universal rule and
+  NOT hardcoded numbers in any calculation code.
+- PCIA/PESE weights come from their applicable assessment-rule version —
+  no universal formula.
 
 PART 1 — SQL migration in db/migrations/ (AUTHORITATIVE — DM-NEW-ORM01):
 - Define assessment_components and assessment_submissions per
@@ -844,6 +863,10 @@ Rules:
 - CONSTITUTION D-01: obtainedMarks being null means "not submitted" not "zero".
 - CONSTITUTION D-02: SUBMITTED_PENDING_EVALUATION is not failure.
 - CONSTITUTION A-02: No LLM calls.
+- DM-ASSESS01: no hardcoded universal CIA/PCIA/ESE weights — component
+  contribution and totals are computed from the active scheme configuration.
+  Configuration-driven aggregation fixtures ASS-06…ASS-12 must pass
+  (docs/08_EVALS.md Section 3).
 - TypeScript strict.
 ```
 

@@ -130,7 +130,39 @@ A student receiving `ATTENDANCE_RISK_CRITICAL` is not officially ineligible — 
 
 ## 4. The Assessment Engine (CIA/PCIA)
 
-**[PENDING OQ-06]** — Exact component structure and weightings must be resolved before this section is FROZEN.
+**FROZEN — DM-ASSESS01 / OQ-06 = RESOLVED (configuration-driven assessment structure).**
+
+### 4.0 Assessment Scheme Configuration (FROZEN — DM-ASSESS01)
+
+ASPIRE uses a **versioned, configuration-driven assessment component model.** The assessment engine MUST NOT hardcode one universal CIA/PCIA/ESE weighting. Component applicability and weighting come from the **effective assessment-scheme configuration** for the institution/programme/course/term (versioned `institution_rules` pattern, 05 §12; materialized per course run in `assessment_components`, 05 §6).
+
+Supported component types (configurable — not universally applicable): `CIA-1`, `CIA-2`, `PCIA`, `ESE`, `PESE`, `Assignment`, `Class Test`, `Attendance`, `Quiz`, `Project`, `Viva`.
+
+**Configuration vs calculation logic:** scheme configuration (component/type, full marks, contribution/weighting, applicability, effective dates/version, institution/programme/course scope) is **data**. The deterministic calculation engine is **logic** that consumes the active configuration. Configuration numbers are never engine constants.
+
+**Current BCREC CSE(AIML) 5th-semester theory template — a versioned BCREC assessment configuration (documented/seeded example, NOT a universal engine rule):**
+
+```text
+CIA-1 = 40
+  Class Test = 25
+  Assignment = 10
+  Attendance = 5
+
+CIA-2 = 40
+  Class Test = 25
+  Assignment = 10
+  Attendance = 5
+
+ESE = 60
+
+Total = 100
+```
+
+This documents the currently published BCREC AIML theory structure **only**. Not every BCREC course uses this structure — other BCREC autonomous syllabi can use different practical assessment structures. ASPIRE models the rule as configuration, not a global constant: **do NOT hardcode these numbers into calculation logic.**
+
+**Practical / PCIA:** `PCIA` and `PESE` are supported component types. Their exact weighting MUST come from the applicable curriculum/assessment-rule version. Do not infer a universal PCIA formula from an unrelated course or programme.
+
+**Assessment data model must represent:** component/type · full marks · contribution/weighting · applicability · effective dates/version · institution/programme/course scope. The deterministic calculation engine consumes the active configuration.
 
 ### 4.1 Assessment Lifecycle States
 ```
@@ -150,7 +182,7 @@ Both are finalized numeric outcomes. `WITHHELD` and `CANCELLED` are excluded.
 Runs when new `GRADED` or `OFFICIAL_ZERO` assessments are entered.
 Normalized: `assessment_percentage = (obtained_marks / maximum_marks) * 100`
 
-**Assessment scope:** Trend calculation scope and component mixing (CIA/PCIA) remain governed by OQ-06. Do not implement cross-component aggregation until OQ-06 is resolved.
+**Assessment scope:** Trend calculation scope and component mixing (CIA/PCIA) follow the active assessment-scheme configuration — DM-ASSESS01 (OQ-06 resolved). Cross-component aggregation uses the scheme's configured components/weights, never hardcoded constants. Trend algorithm and rules below are unchanged.
 
 ```python
 def compute_trend(eligible_assessments: list) -> str:
@@ -432,7 +464,7 @@ For agent-triggered mutations, the provenance chain must be traceable:
 | ID | Question | Owner | Status |
 |---|---|---|---|
 | OQ-05 | BCREC data contact for real validation samples | All | 🔴 OPEN |
-| OQ-06 | CIA/PCIA component structure and weights for autonomous batches | Bishesh | 🔴 OPEN — blocks assessment engine |
+| OQ-06 | CIA/PCIA component structure and weights for autonomous batches | Bishesh | ✅ RESOLVED — DM-ASSESS01 (OQ-06 = RESOLVED): configuration-driven scheme; BCREC AIML theory template documented in §4.0 as versioned configuration |
 | OQ-07 | MAR points calculation rules | Abhijit | 🔴 OPEN |
 | OQ-08 | Exact roll number format at BCREC | Bishesh | 🔴 OPEN |
 | OQ-AG03 | Scheduler mechanism for EXAM_APPROACHING, TASK_OVERDUE, MENTOR_FOLLOWUP_DUE | Bishesh | ✅ RESOLVED — DM-AG03 (hybrid: event-driven state changes + 5-minute periodic scheduler, §8.3) |

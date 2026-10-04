@@ -52,6 +52,18 @@ These fixtures must all pass before `services/engines/attendance.py` is merged.
 | ASS-04 | obtained_marks=0, status=OFFICIAL_ZERO | Treated as zero. Different from NOT_SUBMITTED. |
 | ASS-05 | status=WITHHELD | Not included in trend calculation |
 
+**Configuration-driven aggregation fixtures (DM-ASSESS01 — OQ-06 resolved):** scheme configuration is data; the engine must never hardcode weights (03 §4.0).
+
+| ID | Input | Expected Output |
+|---|---|---|
+| ASS-06 | Active BCREC AIML theory scheme config | Resolves CIA-1=40, CIA-2=40, ESE=60 from configuration |
+| ASS-07 | CIA-1 configured sub-components: Class Test 25 + Assignment 10 + Attendance 5 | CIA-1 total = 40 — computed from config, not hardcoded |
+| ASS-08 | CIA-2 with the configured sub-weights | CIA-2 total = 40 — computed from config, not hardcoded |
+| ASS-09 | ESE component with configured full marks 60 | ESE contribution = 60 |
+| ASS-10 | Aggregate CIA-1 + CIA-2 + ESE under the active scheme | Total = 100 — configuration-driven aggregation |
+| ASS-11 | Alternate scheme config (different programme/term) with different components/weights | Same engine code path computes from that config — different numbers, zero hardcoded weighting |
+| ASS-12 | PCIA/PESE scheme with weights from its own assessment-rule version | Uses configured weights exactly — no universal PCIA/PESE formula assumed |
+
 ---
 
 ## 4. RBAC Tests (Zero Tolerance)

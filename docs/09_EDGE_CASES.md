@@ -37,6 +37,12 @@
 | EC-ASS-03 | Assessment is WITHHELD | Not included in trend calculation. Not displayed as a score. Shown as "Withheld" to the student. |
 | EC-ASS-04 | Only 5 graded assessments exist (need 6 for trend) | TREND_NOT_ESTABLISHED. No declining event emitted. |
 | EC-ASS-05 | Grade corrected by faculty after initial entry | Old record → SUPERSEDED. New record → VERIFIED. Audit event created. Derived state recomputed. |
+| EC-ASS-06 | Active scheme references a component missing from `assessment_components` | Config/validation gap surfaced — aggregation must not silently drop the component or invent a default weight (DM-ASSESS01) |
+| EC-ASS-07 | Assessment is CANCELLED | Excluded from calculation/aggregation — never counted as zero, never treated as failed (03 §4.1: CANCELLED excluded; lifecycle unchanged) |
+| EC-ASS-08 | New scheme version activated mid-term | Version resolution follows `institution_rules` effective dating (`effective_from`/`effective_to`/`version`) — prior version stays immutable history; no silent re-application of old weights |
+| EC-ASS-09 | Effective-date boundary (scheme switches at a timestamp) | Deterministic resolution: the version whose effective window covers the evaluation instant applies — engine never picks an arbitrary version |
+| EC-ASS-10 | Two courses in the same programme use different scheme configs | Course-specific configuration applies per course run — weights never bleed across courses |
+| EC-ASS-11 | Practical course's PCIA weights differ from the theory template | PCIA weights come from its own applicable rule version — the BCREC theory 40/40/60 template is never applied to it (DM-ASSESS01) |
 
 ---
 

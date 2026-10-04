@@ -327,7 +327,7 @@ These are not failures. These are decisions.
 | ID | Question | Owner | Status |
 |---|---|---|---|
 | OQ-05 | Who is the BCREC contact for real data access and validation? | All | 🔴 OPEN |
-| OQ-06 | What is the exact CIA/PCIA component structure and weightings for autonomous batches at BCREC? | Bishesh | 🔴 OPEN — needed before `03_SYSTEM_SPEC.md` Assessment section is FROZEN |
+| OQ-06 | What is the exact CIA/PCIA component structure and weightings for autonomous batches at BCREC? | Bishesh | ✅ RESOLVED — DM-ASSESS01 (OQ-06 = RESOLVED): configuration-driven scheme; BCREC theory template is versioned config, not a fixed universal weighting |
 | OQ-07 | What exactly constitutes a "MAR activity" and how are points calculated under autonomous rules? | Abhijit | 🔴 OPEN — needed before P1-05 spec is FROZEN |
 | OQ-08 | What is the correct roll number for each team member? | All | 🔴 OPEN |
 

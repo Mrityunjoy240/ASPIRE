@@ -14,9 +14,12 @@
 
 > **API contract authority (DM-API01 — FROZEN):** The HTTP API source of truth is **FastAPI route definitions + Pydantic request/response models**. FastAPI generates the OpenAPI document from them; the committed generated artifact **`contracts/openapi.json`** is the reviewable contract consumed by the TypeScript frontend (generated TS types are derived artifacts — never hand-edited, no duplicate contract files, CI fails on drift). This document remains the source of truth for the PostgreSQL schema and the *specification* of API boundaries; the machine-readable contract artifact is `contracts/openapi.json`.
 
-> [!CAUTION]
-> **OQ-06 (CIA/PCIA exact structure) is still OPEN.** The Assessment tables are marked
-> `[PENDING OQ-06]` and must not be built until that open item is resolved by Bishesh.
+> [!NOTE]
+> **OQ-06 = RESOLVED (DM-ASSESS01): configuration-driven assessment structure.** Assessment
+> components are configuration — no fixed/universal CIA/PCIA weighting exists. Scheme
+> configuration uses the versioned `institution_rules` pattern (§12); `assessment_components`
+> (§6) materializes components per course run. The BCREC AIML theory template (40/40/60) is a
+> versioned configuration example (03 §4.0), never a schema constant.
 
 ---
 
@@ -184,18 +187,23 @@ computed_at              TIMESTAMPTZ NOT NULL
 
 ## 6. Assessment Tables
 
-**[PENDING OQ-06] — Exact CIA/PCIA component structure needed from Bishesh before finalizing.**
+**FROZEN — DM-ASSESS01 (OQ-06 resolved): configuration-driven assessment structure.**
+
+The entities below represent configurable assessment components: component/type, full marks (`max_marks`), contribution/weighting (`weight_percent`), applicability (`is_mandatory`), and scope (`course_run_id` → course/term → programme → institution). Effective dates and versioning are provided by the existing **`institution_rules`** pattern (§12: `scope_level`, `scope_id`, `value JSONB`, `effective_from`, `effective_to`, `version`, `status`) — the assessment scheme (full component hierarchy incl. sub-weights such as Class Test/Assignment/Attendance inside CIA-1) lives there as a versioned configuration entry. **No new columns are invented here — the existing architecture already has the extensibility pattern.**
+
+> **Bounded contract follow-up (not silently invented):** if per-course-run materialization of *nested* sub-components is required (a parent/child link inside `assessment_components`), that single missing piece (`parent_component_id`) must be added as an explicit, reviewed migration — flagged here rather than guessed. The scheme JSONB can already express the hierarchy in the meantime.
 
 ### `assessment_components`
--- Defines the type and weight of each CIA/PCIA component for a course run.
+-- Configuration rows for a course run's assessment components (DM-ASSESS01).
+-- Configuration lives here/in institution_rules; calculation logic lives in the engine — never the reverse.
 ```sql
 id               UUID PRIMARY KEY
 course_run_id    UUID REFERENCES course_runs(id)
-name             TEXT NOT NULL               -- e.g., 'CIA-1', 'Lab Record'
-type             TEXT NOT NULL               -- CIA | PCIA | LAB | ASSIGNMENT
-max_marks        NUMERIC(5,2) NOT NULL
-weight_percent   NUMERIC(5,2)                -- [PENDING OQ-06]
-is_mandatory     BOOLEAN DEFAULT TRUE
+name             TEXT NOT NULL               -- e.g., 'CIA-1', 'Class Test', 'Assignment', 'ESE'
+type             TEXT NOT NULL               -- CIA | CIA-1 | CIA-2 | PCIA | ESE | PESE | LAB | ASSIGNMENT | CLASS_TEST | ATTENDANCE | QUIZ | PROJECT | VIVA
+max_marks        NUMERIC(5,2) NOT NULL       -- full marks
+weight_percent   NUMERIC(5,2)                -- contribution/weighting from the active scheme configuration (DM-ASSESS01)
+is_mandatory     BOOLEAN DEFAULT TRUE        -- applicability
 ```
 
 ### `assessment_submissions`
@@ -395,6 +403,6 @@ All writes go through the typed API layer.
 | ID | Question | Owner | Status |
 |---|---|---|---|
 | OQ-05 | Who is the BCREC contact for real data samples? | All | 🔴 OPEN |
-| OQ-06 | Exact CIA/PCIA component structure and weightings for autonomous batches | Bishesh | 🔴 OPEN — blocks finalizing `assessment_components` |
+| OQ-06 | Exact CIA/PCIA component structure and weightings for autonomous batches | Bishesh | ✅ RESOLVED — DM-ASSESS01 (OQ-06 = RESOLVED): configuration-driven scheme via `institution_rules` + `assessment_components`; no universal weighting |
 | OQ-07 | MAR points calculation rules | Abhijit | 🔴 OPEN |
 | OQ-08 | Confirm correct roll number format at BCREC | Bishesh | 🔴 OPEN |
