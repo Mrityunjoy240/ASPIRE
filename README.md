@@ -114,10 +114,11 @@ uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
 |---|---|---|
 | [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
 | [`AI_WORKING_STATE.md`](./docs/AI_WORKING_STATE.md) | Current phase, task, blockers — AI agent handoff | 🔄 LIVE |
+| [`ADR-001`](./docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) | Mother System Architecture specification | 🟢 FROZEN |
 | [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🟡 UNDER REVIEW |
 | [`02_USER_JOURNEYS.md`](./docs/02_USER_JOURNEYS.md) | Exact step-by-step flows for every user type | 🟡 UNDER REVIEW |
 | [`03_SYSTEM_SPEC.md`](./docs/03_SYSTEM_SPEC.md) | Deterministic engines — math, state machines, logic | 🟡 UNDER REVIEW |
-| [`04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) | Tech stack, frozen decisions (DM-*), service map | 🟡 UNDER REVIEW |
+| [`04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) | Tech stack, frozen decisions (DM-*, ADR-001), service map | 🟢 FROZEN |
 | [`05_DATA_API_CONTRACTS.md`](./docs/05_DATA_API_CONTRACTS.md) | PostgreSQL schema + API endpoint shapes | 🔴 DRAFT |
 | [`06_AGENT_SPEC.md`](./docs/06_AGENT_SPEC.md) | Agent contracts, tools, boundaries, degradation | 🟡 UNDER REVIEW |
 | [`07_SECURITY_TRUST.md`](./docs/07_SECURITY_TRUST.md) | Auth, RBAC, prompt injection, audit requirements | 🔴 DRAFT |

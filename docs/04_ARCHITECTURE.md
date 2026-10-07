@@ -1,10 +1,10 @@
 # 04_ARCHITECTURE.md
 # EduGen AI / ASPIRE — System Architecture
 
-**STATUS: 🟡 UNDER REVIEW** — Multiple decisions frozen (see §5). Full sign-off pending Mother System architecture phase.
+**STATUS: 🟢 FROZEN** — Mother System architecture frozen via [ADR-001](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) (07 Oct 2026).
 **Author:** Mrityunjoy Kapat (Team Lead)
-**Date:** 03 October 2026
-**Version:** 1.1 (frozen decisions applied 03–07 Oct 2026)
+**Date:** 07 October 2026
+**Version:** 2.0 (Mother System architecture frozen)
 
 > [!IMPORTANT]
 > This document defines **service boundaries, ownership, and communication contracts**.
@@ -168,6 +168,7 @@ periodic scheduler
 | Web | Next.js 15 App Router | Server components. TypeScript native. Vercel deploy. |
 | API | FastAPI | Async. Auto-generated OpenAPI docs. Python for ML interop. |
 | Python tooling | uv + root `pyproject.toml` + `uv.lock` | Fast, reproducible Python envs. Single package in v1 — no uv workspace. |
+| **ADR-001 — Mother System Architecture = ✅ DECIDED** | Layered Modular Monolith (FastAPI) + LangGraph + in-process async event dispatch + 5m hybrid scheduler | Full specification in [ADR-001](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md). Single core serving all clients; zero business logic in clients. |
 | **DM-NEW-ORM01 — ORM / DB access = ✅ DECIDED** | SQLAlchemy 2.x (async) + psycopg 3 + repository/service layer | SQL migrations in `db/migrations/` are the **authoritative schema source**; SQLAlchemy models mirror `05_DATA_API_CONTRACTS.md` for runtime access only (never a competing schema source). **Prisma removed.** No Alembic as a second schema/migration authority. Exact versions pinned via `uv.lock`. |
 | **DM-API01 — API contract = ✅ DECIDED** | FastAPI routes + Pydantic → generated `contracts/openapi.json` → TS types | Single canonical committed artifact; no manual edits; no duplicate contract files; CI fails on drift. |
 | **DM-LLM01 — LLM gateway & failure behavior = ✅ DECIDED** | `Agent → internal LLMService → OpenRouter`; modes `LIVE` / `MOCK` | No direct agent→provider calls; deterministic MOCK fixtures for tests only; one bounded retry (transient/rate-limit) with bounded backoff; structured-output validation before any business use; controlled unavailable result; per-attempt audit metadata. No silent cross-model fallback (evaluation still selects the production model). |
@@ -250,10 +251,16 @@ ASPIRE/
 
 ---
 
-## 8. Open Items
+## 8. Open Items & Frozen Architecture Resolutions
 
-| ID | Question | Owner | Status |
+| ID | Item | Owner | Status |
 |---|---|---|---|
-| OQ-A01 | Should the API and Agents run as a single FastAPI process in v1 or separate services? | Mrityunjoy + Bishesh | ✅ RESOLVED — Single FastAPI application/process in v1 (Team Lead decision, 03 Oct 2026) |
-| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | ✅ RESOLVED — Next.js: native; FastAPI: native; Supabase (Postgres/Auth/Storage/Data API/Studio): Supabase CLI local stack; Docker Compose only for other local infra — no second custom Supabase Compose stack (Team Lead decision, 03 Oct 2026; Supabase local-dev strategy frozen) |
-| OQ-A03 | Shared `packages/schemas` — TypeScript only or Python Pydantic models too? | All | ✅ RESOLVED — TypeScript Zod for frontend, Python Pydantic for backend; compatibility via OpenAPI contract + tests (Team Lead decision, 03 Oct 2026) |
+| OQ-A01 | Should API and Agents run as a single FastAPI process in v1 or separate services? | Mrityunjoy + Bishesh | ✅ RESOLVED — Single FastAPI application/process in v1 (03 Oct 2026) |
+| OQ-A02 | What is the local dev setup? (Docker Compose? Each service independently?) | Bishesh | ✅ RESOLVED — Next.js: native; FastAPI: native; Supabase (Postgres/Auth/Storage/Data API/Studio): Supabase CLI local stack; Docker Compose only for other local infra (03 Oct 2026) |
+| OQ-A03 | Shared `packages/schemas` — TypeScript only or Python Pydantic models too? | All | ✅ RESOLVED — TypeScript Zod for frontend, Python Pydantic for backend; compatibility via OpenAPI contract + tests (03 Oct 2026) |
+| ARCH-01 | Agent Framework Selection | Mrityunjoy | ✅ RESOLVED — LangGraph frozen via ADR-001 (07 Oct 2026) |
+| ARCH-02 | Message Bus / Background Processing | Bishesh | ✅ RESOLVED — Asyncio in-process event bus for v1; no Redis/Kafka/Temporal in v1 (ADR-001) |
+| ARCH-04 | Mother System Internal Topology | Mrityunjoy + Bishesh | ✅ RESOLVED — Layered Modular Monolith in single FastAPI container (ADR-001) |
+| OQ-AG02 | Synchronous vs Async Agent Execution | Mrityunjoy | ✅ RESOLVED — Event-triggered async background tasks + ad-hoc sync query endpoints (ADR-001) |
+| OQ-AG03 | Scheduler Implementation Mechanism | Bishesh | ✅ RESOLVED — In-process asyncio worker loop at startup + every 5 minutes (DM-AG03 / ADR-001) |
+
