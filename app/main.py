@@ -10,7 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine
-from app.security.auth import get_llm_service
+from app.api.routers import students, attendance, assessments, tasks, cases
+from app.services.llm_service import get_llm_service
 
 
 @asynccontextmanager
@@ -48,15 +49,12 @@ async def health_check():
     return {"status": "ok", "version": "0.1.0", "env": settings.app_env}
 
 
-# API routers (to be implemented)
-# from app.api import students, attendance, assessments, tasks, cases, documents, rules
-# app.include_router(students.router, prefix="/api/v1")
-# app.include_router(attendance.router, prefix="/api/v1")
-# app.include_router(assessments.router, prefix="/api/v1")
-# app.include_router(tasks.router, prefix="/api/v1")
-# app.include_router(cases.router, prefix="/api/v1")
-# app.include_router(documents.router, prefix="/api/v1")
-# app.include_router(rules.router, prefix="/api/v1")
+# API routers (routers already have /api/v1 prefix)
+app.include_router(students.router)
+app.include_router(attendance.router)
+app.include_router(assessments.router)
+app.include_router(tasks.router)
+app.include_router(cases.router)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,1352 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ASPIRE Mother System API",
+    "description": "Student Success Intelligence Platform — Core API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/students/me": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Get own student profile",
+        "description": "Return authenticated student's own profile.",
+        "operationId": "get_own_profile_api_v1_students_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentSelfResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/students/{student_id}": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Get student profile (mentor/faculty/admin view)",
+        "description": "Return student profile with risk signals for mentor/faculty.",
+        "operationId": "get_student_mentor_view_api_v1_students__student_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentMentorViewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/{student_id}/summary": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "Attendance summary with risk status per course",
+        "description": "Attendance summary per course with risk bands.",
+        "operationId": "get_attendance_summary_api_v1_attendance__student_id__summary_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttendanceSummaryResponse"
+                  },
+                  "title": "Response Get Attendance Summary Api V1 Attendance  Student Id  Summary Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/{student_id}/what-if": {
+      "get": {
+        "tags": [
+          "Attendance"
+        ],
+        "summary": "Deterministic attendance recovery calculator",
+        "description": "Deterministic recovery calculator.\nReturns required future classes to reach target percentage.",
+        "operationId": "get_attendance_what_if_api_v1_attendance__student_id__what_if_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+                }
+              ],
+              "title": "Target"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceWhatIfResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assessments/{student_id}/summary": {
+      "get": {
+        "tags": [
+          "Assessments"
+        ],
+        "summary": "Assessment breakdown & trend signals per course",
+        "description": "Assessment component breakdown with trend for a specific course.",
+        "operationId": "get_assessment_summary_api_v1_assessments__student_id__summary_get",
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          },
+          {
+            "name": "course_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Course Id"
+            }
+          },
+          {
+            "name": "args",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "title": "Args"
+            }
+          },
+          {
+            "name": "kwargs",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "title": "Kwargs"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/student/{student_id}": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Active/pending tasks for a student",
+        "description": "Return all pending/active tasks for a student.",
+        "operationId": "get_student_tasks_api_v1_tasks_student__student_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "student_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Student Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TaskResponse"
+                  },
+                  "title": "Response Get Student Tasks Api V1 Tasks Student  Student Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_id}/complete": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Mark task as completed by student",
+        "description": "Student marks a task as completed.",
+        "operationId": "complete_task_api_v1_tasks__task_id__complete_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskCompleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/{task_id}/snooze": {
+      "post": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Snooze a task (student action)",
+        "description": "Student snoozes a task.",
+        "operationId": "snooze_task_api_v1_tasks__task_id__snooze_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/queue": {
+      "get": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Mentor priority triage queue",
+        "description": "Mentor queue ordered by Urgency Band → Exam Proximity → Days Since Last Action (DM-SS03).",
+        "operationId": "get_mentor_queue_api_v1_cases_queue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CaseQueueItemResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Mentor Queue Api V1 Cases Queue Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/cases/{case_id}/approve": {
+      "post": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Mentor human-in-the-loop approval",
+        "description": "Mentor approves/edits/rejects intervention plan.",
+        "operationId": "approve_case_api_v1_cases__case_id__approve_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseApproveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AssessmentSubmissionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "component_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Component Id"
+          },
+          "component_name": {
+            "type": "string",
+            "title": "Component Name"
+          },
+          "component_type": {
+            "type": "string",
+            "title": "Component Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "obtained_marks": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Obtained Marks"
+          },
+          "maximum_marks": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Marks"
+          },
+          "percentage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentage"
+          },
+          "weight_percent": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weight Percent"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "graded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "component_id",
+          "component_name",
+          "component_type",
+          "status",
+          "obtained_marks",
+          "maximum_marks",
+          "percentage",
+          "weight_percent",
+          "submitted_at",
+          "graded_at"
+        ],
+        "title": "AssessmentSubmissionResponse"
+      },
+      "AssessmentSummaryResponse": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "course_name": {
+            "type": "string",
+            "title": "Course Name"
+          },
+          "weighted_average": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weighted Average"
+          },
+          "trend": {
+            "type": "string",
+            "title": "Trend"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/AssessmentSubmissionResponse"
+            },
+            "type": "array",
+            "title": "Components"
+          },
+          "missing_components": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Missing Components"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "course_id",
+          "course_name",
+          "weighted_average",
+          "trend",
+          "components",
+          "missing_components"
+        ],
+        "title": "AssessmentSummaryResponse"
+      },
+      "AttendanceSummaryResponse": {
+        "properties": {
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "course_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Course Id"
+          },
+          "course_name": {
+            "type": "string",
+            "title": "Course Name"
+          },
+          "classes_conducted": {
+            "type": "integer",
+            "title": "Classes Conducted"
+          },
+          "classes_attended": {
+            "type": "integer",
+            "title": "Classes Attended"
+          },
+          "attendance_percentage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendance Percentage"
+          },
+          "risk_band": {
+            "type": "string",
+            "title": "Risk Band"
+          },
+          "required_to_recover": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required To Recover"
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "student_id",
+          "course_id",
+          "course_name",
+          "classes_conducted",
+          "classes_attended",
+          "attendance_percentage",
+          "risk_band",
+          "required_to_recover",
+          "computed_at"
+        ],
+        "title": "AttendanceSummaryResponse"
+      },
+      "AttendanceWhatIfResponse": {
+        "properties": {
+          "current_percentage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Percentage"
+          },
+          "current_conducted": {
+            "type": "integer",
+            "title": "Current Conducted"
+          },
+          "current_attended": {
+            "type": "integer",
+            "title": "Current Attended"
+          },
+          "target_percentage": {
+            "type": "string",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Target Percentage"
+          },
+          "required_future_classes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Future Classes"
+          },
+          "projected_percentage": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projected Percentage"
+          },
+          "disclaimer": {
+            "type": "string",
+            "title": "Disclaimer",
+            "default": "Planning estimate — not an official academic eligibility decision."
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_percentage",
+          "current_conducted",
+          "current_attended",
+          "target_percentage",
+          "required_future_classes",
+          "projected_percentage"
+        ],
+        "title": "AttendanceWhatIfResponse"
+      },
+      "CaseApproveRequest": {
+        "properties": {
+          "mentor_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentor Notes"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "CaseApproveRequest"
+      },
+      "CaseApproveResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "mentor_decision": {
+            "type": "string",
+            "title": "Mentor Decision"
+          },
+          "acted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Acted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "mentor_decision",
+          "acted_at"
+        ],
+        "title": "CaseApproveResponse"
+      },
+      "CaseQueueItemResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "student_name": {
+            "type": "string",
+            "title": "Student Name"
+          },
+          "student_roll": {
+            "type": "string",
+            "title": "Student Roll"
+          },
+          "urgency_band": {
+            "type": "string",
+            "title": "Urgency Band"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "trigger_events": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Trigger Events"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opened At"
+          },
+          "nearest_exam_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearest Exam Days"
+          },
+          "days_since_last_action": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "student_id",
+          "student_name",
+          "student_roll",
+          "urgency_band",
+          "status",
+          "trigger_events",
+          "opened_at",
+          "nearest_exam_days",
+          "days_since_last_action"
+        ],
+        "title": "CaseQueueItemResponse"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "StudentMentorViewResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "batch_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Batch Id"
+          },
+          "roll_number": {
+            "type": "string",
+            "title": "Roll Number"
+          },
+          "mentor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentor Id"
+          },
+          "class_teacher_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Id"
+          },
+          "enrollment_year": {
+            "type": "integer",
+            "title": "Enrollment Year"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "attendance_risk_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendance Risk Band"
+          },
+          "assessment_trend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assessment Trend"
+          },
+          "overdue_tasks_count": {
+            "type": "integer",
+            "title": "Overdue Tasks Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "batch_id",
+          "roll_number",
+          "mentor_id",
+          "class_teacher_id",
+          "enrollment_year",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudentMentorViewResponse",
+        "description": "Profile for mentor/faculty view (includes risk signals)."
+      },
+      "StudentSelfResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "batch_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Batch Id"
+          },
+          "roll_number": {
+            "type": "string",
+            "title": "Roll Number"
+          },
+          "mentor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mentor Id"
+          },
+          "class_teacher_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Teacher Id"
+          },
+          "enrollment_year": {
+            "type": "integer",
+            "title": "Enrollment Year"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "batch_id",
+          "roll_number",
+          "mentor_id",
+          "class_teacher_id",
+          "enrollment_year",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudentSelfResponse",
+        "description": "Extended profile for self-view (includes computed fields)."
+      },
+      "TaskCompleteRequest": {
+        "properties": {},
+        "type": "object",
+        "title": "TaskCompleteRequest"
+      },
+      "TaskCompleteResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Task Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "status",
+          "completed_at"
+        ],
+        "title": "TaskCompleteResponse"
+      },
+      "TaskResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "student_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Student Id"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "source_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Id"
+          },
+          "created_by": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Created By"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "explicit_priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explicit Priority"
+          },
+          "urgency_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Urgency Score"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "student_id",
+          "source_type",
+          "source_id",
+          "created_by",
+          "title",
+          "deadline",
+          "status",
+          "explicit_priority",
+          "urgency_score",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TaskResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
