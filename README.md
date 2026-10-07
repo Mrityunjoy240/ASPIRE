@@ -114,6 +114,7 @@ uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
 |---|---|---|
 | [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
 | [`AI_WORKING_STATE.md`](./docs/AI_WORKING_STATE.md) | Current phase, task, blockers — AI agent handoff | 🔄 LIVE |
+| [`ASPIRE_APPLICATION_BOUNDARIES.md`](./docs/ASPIRE_APPLICATION_BOUNDARIES.md) | Ecosystem structure, Mother App (Web), Core Platform, OpenCode vs Android Studio | 🟢 FROZEN |
 | [`DESIGN.md`](./DESIGN.md) | UI/UX design system, color tokens, component patterns | 🟢 FROZEN |
 | [`ADR-001`](./docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) | Mother System Architecture specification | 🟢 FROZEN |
 | [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🟡 UNDER REVIEW |

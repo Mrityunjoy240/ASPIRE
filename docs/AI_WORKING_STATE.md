@@ -9,16 +9,19 @@
 
 ### Current Phase
 
-**Phase 0 Preparation — Mother System Architecture Frozen**
+**Mother System / Mother Application Foundation**
 
-The Mother System architecture is formally frozen via [ADR-001](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md).
-The system core is designed as a Layered Modular Monolith in FastAPI with LangGraph agent orchestration, async in-process event dispatch, pure Python deterministic engines, and SQLAlchemy 2.x async repositories over PostgreSQL/Supabase.
+ASPIRE is structured as ONE unified product ecosystem:
+1. **ASPIRE Mother Application (Web):** The primary human-facing operational & management control application (System Admin, Institution Admin, HOD, Faculty, Mentors) built in Next.js 15 App Router.
+2. **ASPIRE Core Platform (Backend & Intelligence):** Centralized FastAPI service, database persistence, deterministic rule engines, LangGraph agent orchestrator, and OpenAPI contracts.
+3. **Clients (Web & Native Android):** Student Web, Faculty Web, and external Native Android applications (Kotlin/Compose built separately in Android Studio).
 
 ---
 
-## Current Objective
+## Current Implementation Owner
 
-Execute Phase 0 foundation: monorepo scaffolding, database migrations runner, and core service foundations before starting client apps.
+- **OpenCode:** Primary implementation agent for the Mother Application (Web), all Web Clients, Backend/Core Platform, Database Migrations, Rule Engines, Agents, and API contracts.
+- **Android Studio (External):** Native Android clients (`apps/android` / separate studio project) developed after core API contracts stabilize.
 
 ---
 
@@ -27,7 +30,9 @@ Execute Phase 0 foundation: monorepo scaffolding, database migrations runner, an
 | Document | Purpose |
 |---|---|
 | `docs/CONSTITUTION.md` | Engineering and product principles |
+| `docs/ASPIRE_APPLICATION_BOUNDARIES.md` | **FROZEN** Ecosystem model, Mother App (Web), Core Platform, OpenCode vs Android Studio boundaries |
 | `docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md` | **FROZEN** Mother System architecture specification |
+| `DESIGN.md` | **FROZEN** UI/UX design system, color tokens, component patterns |
 | `docs/01_PRD.md` | Product scope, P0/P1 features, demo story |
 | `docs/02_USER_JOURNEYS.md` | User flows (student risk, mentor queue, data conflict) |
 | `docs/03_SYSTEM_SPEC.md` | Deterministic engines: attendance, assessment, tasks, events, cases |
@@ -46,6 +51,7 @@ Execute Phase 0 foundation: monorepo scaffolding, database migrations runner, an
 | ID | Decision |
 |---|---|
 | ADR-001 | Mother System Layered Modular Monolith (FastAPI) + LangGraph agent orchestration + in-process async event dispatch + 5m hybrid scheduler. Zero client-side business logic. |
+| APP-BOUND-01 | ASPIRE is ONE product. Mother Application is a human-facing Web management/control app (`apps/web`). Core Platform is backend/engines. Native Android apps are built in Android Studio as external API consumers. |
 | DM-NEW-ORM01 | SQLAlchemy 2.x (async) + psycopg3 + repository layer. Prisma removed. `db/migrations/*.sql` is the ONLY schema authority. |
 | DM-API01 | FastAPI + Pydantic → generated `contracts/openapi.json`. No manual edits. CI fails on drift. |
 | DM-LLM01 | `Agent → LLMService → OpenRouter`. LIVE and MOCK modes only. One bounded retry. Schema-validate all output. No silent cross-model fallback. |
@@ -70,18 +76,20 @@ Execute Phase 0 foundation: monorepo scaffolding, database migrations runner, an
 ## Current Architecture (Summary)
 
 ```
-Client Apps (Next.js 15 Web / PWA)   ← consume Mother System via API
-         │ (HTTPS / Supabase JWT)
-    FastAPI API Gateway               ← auth, RBAC, routing, OpenAPI contract
-         │
-    ┌────┴────────┐
-Rule Engines    Agent Orchestrator
-(pure Python)   (LangGraph state graph)
-         │               │
-         │          LLM Service (→ OpenRouter)
-         │               │
+       ASPIRE MOTHER APPLICATION (Web / Next.js)
+                         │
+       ASPIRE CLIENT APPS (Student Web / Native Android)
+                         │ (HTTPS / Supabase JWT)
+             FastAPI API Gateway (Mother System Core)
+                         │
+          ┌──────────────┴──────────────┐
+     Rule Engines                 Agent Orchestrator
+    (pure Python)                 (LangGraph state graph)
+          │                              │
+          │                         LLM Service (→ OpenRouter)
+          │                              │
     SQLAlchemy Repositories (async)
-         │
+          │
     PostgreSQL + pgvector (Supabase)
 ```
 
@@ -89,13 +97,33 @@ Rule Engines    Agent Orchestrator
 
 ## Current Task
 
-**T-000 completed.** Monorepo scaffolded (`apps/web`, `apps/mobile`, `packages/shared`), strict TypeScript enabled, Tailwind configured, build verified. Feature branch `feature/T-000-project-scaffold` committed and pushed.
+**Application Boundaries & Ecosystem Ownership Frozen.** Created [`docs/ASPIRE_APPLICATION_BOUNDARIES.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/ASPIRE_APPLICATION_BOUNDARIES.md), updated [`AGENTS.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/AGENTS.md), [`README.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/README.md), and [`docs/AI_WORKING_STATE.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/AI_WORKING_STATE.md).
 
 ---
 
-## Next Task
+## Next Major Task
 
-**T-001: CI Pipeline (GitHub Actions)** or **T-002: Database Setup (PostgreSQL + SQLAlchemy + pgvector)**.
+**Define and implement the Mother Application (Web control/management environment in `apps/web`) + Core Platform as one coherent system.**
+
+---
+
+## Android Implementation Note
+
+Native Android development is deferred to **Android Studio** after the shared core and API contracts stabilize. No native Android code is built in this web repository.
+
+---
+
+## Do Not Do
+
+- Do NOT build native Android Kotlin/Compose projects in this web workspace
+- Do NOT duplicate business rules or calculation logic across clients
+- Do NOT treat Mother Application and Core Platform as separate disconnected products
+- Do NOT introduce Redis, Kafka, Temporal, or Celery in v1
+- Do NOT invent BCREC institutional rules or data
+- Do NOT rewrite frozen decisions without team lead approval
+- Do NOT bypass `LLMService` or call model providers directly from agents
+- Do NOT perform raw SQL queries from agents
+
 
 ---
 
