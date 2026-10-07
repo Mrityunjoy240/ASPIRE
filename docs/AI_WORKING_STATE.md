@@ -31,8 +31,9 @@ ASPIRE is structured as ONE unified product ecosystem:
 |---|---|
 | `docs/CONSTITUTION.md` | Engineering and product principles |
 | `docs/ASPIRE_APPLICATION_BOUNDARIES.md` | **FROZEN** Ecosystem model, Mother App (Web), Core Platform, OpenCode vs Android Studio boundaries |
+| `docs/ASPIRE_MOTHER_APPLICATION_SPECIFICATION.md` | **FROZEN** Mother Application role workspaces, management capabilities & UX |
 | `docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md` | **FROZEN** Mother System architecture specification |
-| `DESIGN.md` | **FROZEN** UI/UX design system, color tokens, component patterns |
+| `DESIGN.md` | **FROZEN** Linear-inspired UI/UX design system, semantic truth tokens, layout rules |
 | `docs/01_PRD.md` | Product scope, P0/P1 features, demo story |
 | `docs/02_USER_JOURNEYS.md` | User flows (student risk, mentor queue, data conflict) |
 | `docs/03_SYSTEM_SPEC.md` | Deterministic engines: attendance, assessment, tasks, events, cases |

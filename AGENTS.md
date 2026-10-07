@@ -98,6 +98,7 @@ Reference institution: BCREC, Durgapur. Target: P0 demo of the full loop for one
 |---|---|
 | `docs/CONSTITUTION.md` | Product + engineering principles |
 | `docs/ASPIRE_APPLICATION_BOUNDARIES.md` | Application boundaries, ecosystem model, and tooling ownership |
+| `docs/ASPIRE_MOTHER_APPLICATION_SPECIFICATION.md` | Mother Application role workspaces, management capabilities & UX |
 | `DESIGN.md` | UI/UX design system, tokens, palettes, component guidelines |
 | `docs/03_SYSTEM_SPEC.md` | Deterministic engine contracts |
 | `docs/04_ARCHITECTURE.md` | Tech stack, frozen decisions, service map |
