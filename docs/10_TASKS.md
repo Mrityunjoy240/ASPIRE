@@ -45,7 +45,7 @@
 ---
 
 ### T-000 — Next.js Monorepo Scaffold
-**Status:** 🔒 BLOCKED — Pre-Coding Gate (AGENTS.md §1): no spec is 🟢 FROZEN, and there is no gate exception (Team Lead decision)
+**Status:** ✅ DONE
 **PRD Ref:** P0-12, P0-15
 **Spec Ref:** CONSTITUTION E-07
 **Branch:** `feature/T-000-project-scaffold`
@@ -67,11 +67,11 @@
 ```
 
 **Acceptance Criteria:**
-- [ ] `npm run build` passes in apps/web with zero errors
-- [ ] TypeScript strict mode enabled
-- [ ] Tailwind CSS working (renders a test div with bg-blue-500)
-- [ ] No secrets in any committed file (Constitution S-05)
-- [ ] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus the frozen Supabase env contract: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URI` (legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` names are NOT used; no `SUPABASE_SECRET_KEY` without a concrete privileged requirement)
+- [x] `npm run build` passes in apps/web with zero errors
+- [x] TypeScript strict mode enabled
+- [x] Tailwind CSS working (renders a test div with bg-blue-500)
+- [x] No secrets in any committed file (Constitution S-05)
+- [x] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus the frozen Supabase env contract: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URI` (legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` names are NOT used; no `SUPABASE_SECRET_KEY` without a concrete privileged requirement)
 
 **OpenCode Prompt:**
 ```
@@ -99,7 +99,7 @@ Verify: 'npm run build' must pass with zero TypeScript errors.
 ---
 
 ### T-001 — CI Pipeline (GitHub Actions)
-**Status:** 🔒 BLOCKED on T-000
+**Status:** ⬜ READY
 **PRD Ref:** P0-16
 **Spec Ref:** CONSTITUTION E-07
 **Branch:** `feature/T-001-ci-pipeline`
@@ -143,7 +143,7 @@ Do NOT add any test runner yet — leave a placeholder 'npm run test' that exits
 ---
 
 ### T-002 — Database Setup (PostgreSQL + SQLAlchemy + pgvector)
-**Status:** 🔒 BLOCKED on T-000
+**Status:** ⬜ READY
 **PRD Ref:** P0-11, P0-13
 **Spec Ref:** 05_DATA_API_CONTRACTS.md — all tables
 **Branch:** `feature/T-002-database`
