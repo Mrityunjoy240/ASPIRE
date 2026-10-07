@@ -71,6 +71,7 @@ Reference institution: BCREC, Durgapur. Target: P0 demo of the full loop for one
 | Document | Authority |
 |---|---|
 | `docs/CONSTITUTION.md` | Product + engineering principles |
+| `DESIGN.md` | UI/UX design system, tokens, palettes, component guidelines |
 | `docs/03_SYSTEM_SPEC.md` | Deterministic engine contracts |
 | `docs/04_ARCHITECTURE.md` | Tech stack, frozen decisions, service map |
 | `docs/05_DATA_API_CONTRACTS.md` | PostgreSQL schema + API shapes |

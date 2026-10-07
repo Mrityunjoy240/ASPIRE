@@ -114,6 +114,7 @@ uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
 |---|---|---|
 | [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
 | [`AI_WORKING_STATE.md`](./docs/AI_WORKING_STATE.md) | Current phase, task, blockers — AI agent handoff | 🔄 LIVE |
+| [`DESIGN.md`](./DESIGN.md) | UI/UX design system, color tokens, component patterns | 🟢 FROZEN |
 | [`ADR-001`](./docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) | Mother System Architecture specification | 🟢 FROZEN |
 | [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🟡 UNDER REVIEW |
 | [`02_USER_JOURNEYS.md`](./docs/02_USER_JOURNEYS.md) | Exact step-by-step flows for every user type | 🟡 UNDER REVIEW |
