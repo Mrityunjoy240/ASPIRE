@@ -113,18 +113,18 @@ uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
 | Doc | Purpose | Status |
 |---|---|---|
 | [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
-| [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🔴 DRAFT |
+| [`AI_WORKING_STATE.md`](./docs/AI_WORKING_STATE.md) | Current phase, task, blockers — AI agent handoff | 🔄 LIVE |
+| [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🟡 UNDER REVIEW |
 | [`02_USER_JOURNEYS.md`](./docs/02_USER_JOURNEYS.md) | Exact step-by-step flows for every user type | 🟡 UNDER REVIEW |
 | [`03_SYSTEM_SPEC.md`](./docs/03_SYSTEM_SPEC.md) | Deterministic engines — math, state machines, logic | 🟡 UNDER REVIEW |
-| [`04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) | Tech stack, monorepo layout, data flow, API design | 🔴 DRAFT |
+| [`04_ARCHITECTURE.md`](./docs/04_ARCHITECTURE.md) | Tech stack, frozen decisions (DM-*), service map | 🟡 UNDER REVIEW |
 | [`05_DATA_API_CONTRACTS.md`](./docs/05_DATA_API_CONTRACTS.md) | PostgreSQL schema + API endpoint shapes | 🔴 DRAFT |
-| [`06_AGENT_SPEC.md`](./docs/06_AGENT_SPEC.md) | Every agent's purpose, tools, boundaries, output schema | 🔴 DRAFT |
-| [`07_SECURITY_TRUST.md`](./docs/07_SECURITY_TRUST.md) | Threat model, RBAC matrix, audit requirements | 🔴 DRAFT |
+| [`06_AGENT_SPEC.md`](./docs/06_AGENT_SPEC.md) | Agent contracts, tools, boundaries, degradation | 🟡 UNDER REVIEW |
+| [`07_SECURITY_TRUST.md`](./docs/07_SECURITY_TRUST.md) | Auth, RBAC, prompt injection, audit requirements | 🔴 DRAFT |
 | [`08_EVALS.md`](./docs/08_EVALS.md) | Test fixtures, eval scenarios, pass/fail criteria | 🔴 DRAFT |
-| [`09_EDGE_CASES.md`](./docs/09_EDGE_CASES.md) | Edge cases for data, agents, ingestion, UI | 🔴 DRAFT |
-| [`10_TASKS.md`](./docs/10_TASKS.md) | Task queue with OpenCode prompts — the build order | 🔴 DRAFT |
-| [`AGENTS.md`](./AGENTS.md) | Quick-reference guide for AI coding agents | 🔴 DRAFT |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | How the team works, branch strategy, PR rules | 🔴 DRAFT |
+| [`09_EDGE_CASES.md`](./docs/09_EDGE_CASES.md) | Edge cases for data, agents, ingestion | 🔴 DRAFT |
+| [`10_TASKS.md`](./docs/10_TASKS.md) | Task queue — build order (review prompts before use) | 🔴 DRAFT |
+| [`AGENTS.md`](./AGENTS.md) | Concise quick-reference for AI coding agents | 🟡 UNDER REVIEW |
 
 ---
 

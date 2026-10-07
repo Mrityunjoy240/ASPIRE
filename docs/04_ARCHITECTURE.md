@@ -1,11 +1,10 @@
 # 04_ARCHITECTURE.md
 # EduGen AI / ASPIRE — System Architecture
 
-**STATUS: 🔴 DRAFT**
+**STATUS: 🟡 UNDER REVIEW** — Multiple decisions frozen (see §5). Full sign-off pending Mother System architecture phase.
 **Author:** Mrityunjoy Kapat (Team Lead)
-**Primary Reviewer:** Abhijit Ghosh (Architecture)
 **Date:** 03 October 2026
-**Version:** 1.0
+**Version:** 1.1 (frozen decisions applied 03–07 Oct 2026)
 
 > [!IMPORTANT]
 > This document defines **service boundaries, ownership, and communication contracts**.
