@@ -1,0 +1,64 @@
+# app/main.py
+# ASPIRE Mother System — FastAPI entry point
+# DM-API01: FastAPI + Pydantic → generated contracts/openapi.json
+# DM-NEW-ORM01: SQLAlchemy 2.x async
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import settings
+from app.core.database import engine
+from app.security.auth import get_llm_service
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    get_llm_service()  # Initialize LLMService singleton
+    yield
+    # Shutdown
+    llm = get_llm_service()
+    await llm.close()
+    await engine.dispose()
+
+
+app = FastAPI(
+    title="ASPIRE Mother System API",
+    description="Student Success Intelligence Platform — Core API",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.app_env != "production" else None,
+    redoc_url="/redoc" if settings.app_env != "production" else None,
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure per environment
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health", tags=["health"])
+async def health_check():
+    return {"status": "ok", "version": "0.1.0", "env": settings.app_env}
+
+
+# API routers (to be implemented)
+# from app.api import students, attendance, assessments, tasks, cases, documents, rules
+# app.include_router(students.router, prefix="/api/v1")
+# app.include_router(attendance.router, prefix="/api/v1")
+# app.include_router(assessments.router, prefix="/api/v1")
+# app.include_router(tasks.router, prefix="/api/v1")
+# app.include_router(cases.router, prefix="/api/v1")
+# app.include_router(documents.router, prefix="/api/v1")
+# app.include_router(rules.router, prefix="/api/v1")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=settings.app_env == "development")
