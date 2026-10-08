@@ -208,6 +208,200 @@ def test_task_complete_requires_ownership(mock_get_auth, mock_get_session, clien
     assert response.status_code == 401
 
 
+# ============ Case Approval (Mentor Plan Approval slice) ============
+
+@pytest.fixture
+def approve_deps():
+    """Temporarily install dependency overrides for auth/session."""
+    from app.main import app as main_app
+    from app.api.deps import get_auth_context
+    from app.core.database import get_session
+
+    saved = dict(main_app.dependency_overrides)
+    yield main_app.dependency_overrides
+    main_app.dependency_overrides.clear()
+    main_app.dependency_overrides.update(saved)
+
+
+def _override_auth_and_session(overrides, auth, session):
+    from app.api.deps import get_auth_context
+    from app.core.database import get_session
+
+    overrides[get_auth_context] = lambda: auth
+    overrides[get_session] = lambda: session
+
+
+def _case_and_plan(case_id: uuid.UUID, mentor_id: uuid.UUID, status):
+    now = datetime.now(timezone.utc)
+    case = InterventionCase(
+        id=case_id,
+        student_id=uuid4(),
+        mentor_id=mentor_id,
+        status=status,
+        urgency_band="URGENT",
+        opened_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    plan = InterventionPlan(
+        id=uuid4(),
+        case_id=case_id,
+        created_by="SYSTEM_AGENT",
+        status="ACCEPTED",
+        plan_actions=[],
+        reason_codes=[],
+        evidence={},
+        created_at=now,
+        updated_at=now,
+    )
+    return case, plan
+
+
+def _result_returning(*values):
+    mocks = []
+    for value in values:
+        m = MagicMock()
+        m.scalar_one_or_none.return_value = value
+        mocks.append(m)
+    return AsyncMock(side_effect=mocks)
+
+
+def test_approve_requires_auth(client):
+    """Approve endpoint must reject unauthenticated requests."""
+    response = client.post(f"/api/v1/cases/{uuid4()}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 401
+
+
+def test_approve_happy_path_emits_event(approve_deps, client, mock_mentor_auth):
+    """200: case → ACTIVE, response schema, audit added, event emitted post-commit."""
+    from app.main import app as main_app
+    from app.services.case_service import EVENT_INTERVENTION_PLAN_APPROVED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)
+    session.execute = _result_returning(case, plan)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_INTERVENTION_PLAN_APPROVED, recorder)
+    try:
+        response = client.post(
+            f"/api/v1/cases/{case_id}/approve",
+            json={"decision": "APPROVED", "mentor_notes": "ok"},
+        )
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"case_id", "mentor_decision", "acted_at"}
+    assert data["case_id"] == str(case_id)
+    assert data["mentor_decision"] == "APPROVED"
+
+    assert case.status == InterventionCaseStatus.ACTIVE
+    session.add.assert_called_once()
+    session.commit.assert_awaited()
+    assert session.add.call_args[0][0].action_type == "PLAN_APPROVED_BY_MENTOR"
+
+    assert len(received) == 1
+    assert received[0].event_type == "INTERVENTION_PLAN_APPROVED"
+    assert received[0].payload["previous_status"] == "PENDING_APPROVAL"
+    assert received[0].payload["new_status"] == "ACTIVE"
+
+
+def test_approve_reject_decision_no_event(approve_deps, client, mock_mentor_auth):
+    """REJECTED → 200, case REPLAN_REQUIRED, no domain event."""
+    from app.main import app as main_app
+    from app.services.case_service import EVENT_INTERVENTION_PLAN_APPROVED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)
+    session.execute = _result_returning(case, plan)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_INTERVENTION_PLAN_APPROVED, recorder)
+    try:
+        response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "REJECTED"})
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    assert plan.status == "DECLINED"
+    assert received == []
+
+
+def test_approve_404_unknown_case(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None, None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{uuid4()}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 404
+
+
+def test_approve_403_not_assigned_mentor(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(case_id, uuid4(), InterventionCaseStatus.PENDING_APPROVAL)
+    session.execute = _result_returning(case, None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 403
+
+
+def test_approve_400_no_plan(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)
+    session.execute = _result_returning(case, None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 400
+
+
+def test_approve_409_illegal_transition(approve_deps, client, mock_mentor_auth):
+    """03_SYSTEM_SPEC §10.2: mentor decisions only from PENDING_APPROVAL."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.ACTIVE)
+    session.execute = _result_returning(case, plan)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_approve_422_invalid_decision(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{uuid4()}/approve", json={"decision": "MAYBE"})
+    assert response.status_code == 422
+
+
 # ============ OpenAPI Contract Tests ============
 
 def test_openapi_contract_generation():

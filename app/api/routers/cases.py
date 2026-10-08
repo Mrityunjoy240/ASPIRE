@@ -4,20 +4,24 @@
 from uuid import UUID
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_auth_context,
+    get_event_bus,
     require_mentor_or_admin,
     get_session,
 )
 from app.api.schemas import CaseQueueItemResponse, CaseApproveRequest, CaseApproveResponse
+from app.core.events import EventBus
 from app.models.intervention import InterventionCase, InterventionPlan
 from app.models.student import StudentProfile
+from app.models.tasks import StudentTask
 from app.models.users import User
 from app.models.enums import InterventionCaseStatus
+from app.services.case_service import CaseApprovalError, approve_plan
 from app.engines.priority import PriorityEngine
 
 
@@ -143,24 +147,36 @@ async def get_mentor_queue(
     response_model=CaseApproveResponse,
     summary="Mentor human-in-the-loop approval",
     dependencies=[Depends(require_mentor_or_admin)],
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": "Case not in PENDING_APPROVAL (03_SYSTEM_SPEC §10.2)",
+        },
+        status.HTTP_400_BAD_REQUEST: {"description": "No plan exists for this case"},
+    },
 )
 async def approve_case(
     case_id: UUID,
     request: CaseApproveRequest,
     auth = Depends(get_auth_context),
     session = Depends(get_session),
+    event_bus: EventBus = Depends(get_event_bus),
 ):
-    """Mentor approves/edits/rejects intervention plan."""
+    """Mentor approves/edits/rejects intervention plan.
+
+    Transition ownership and event emission live in the Case Approval
+    Service (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then
+    INTERVENTION_PLAN_APPROVED for approval decisions.
+    """
     result = await session.execute(
         select(InterventionCase).where(InterventionCase.id == case_id)
     )
     case = result.scalar_one_or_none()
     if not case:
-        raise status.HTTP_404_NOT_FOUND
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
     if not (auth.is_admin() or auth.has_role("HOD") or case.mentor_id == auth.user_id):
-        raise status.HTTP_403_FORBIDDEN
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not this case's mentor")
+
     # Get the latest plan for this case
     result = await session.execute(
         select(InterventionPlan)
@@ -169,29 +185,28 @@ async def approve_case(
     )
     plan = result.scalar_one_or_none()
     if not plan:
-        raise status.HTTP_400_BAD_REQUEST("No plan to approve")
-    
-    plan.mentor_decision = request.decision
-    plan.mentor_notes = request.mentor_notes
-    plan.mentor_acted_at = datetime.now(timezone.utc)
-    
-    if request.decision == "APPROVED":
-        plan.status = "APPROVED"
-        case.status = InterventionCaseStatus.ACTIVE
-    elif request.decision == "EDITED":
-        plan.status = "CUSTOMIZED"
-        case.status = InterventionCaseStatus.PLAN_PROPOSED
-    elif request.decision == "REJECTED":
-        plan.status = "DECLINED"
-        case.status = InterventionCaseStatus.REPLAN_REQUIRED
-    
-    case.updated_at = datetime.now(timezone.utc)
-    await session.flush()
-    
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No plan to approve"
+        )
+
+    try:
+        approval = await approve_plan(
+            session,
+            case=case,
+            plan=plan,
+            decision=request.decision,
+            mentor_notes=request.mentor_notes,
+            actor_id=auth.user_id,
+            event_bus=event_bus,
+        )
+    except CaseApprovalError as exc:
+        code = status.HTTP_409_CONFLICT if exc.code == "ILLEGAL_TRANSITION" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
+
     return CaseApproveResponse(
-        case_id=case_id,
-        mentor_decision=request.decision,
-        acted_at=plan.mentor_acted_at,
+        case_id=approval.case_id,
+        mentor_decision=approval.decision,
+        acted_at=approval.acted_at,
     )
 
 

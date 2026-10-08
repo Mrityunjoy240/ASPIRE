@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import engine
+from app.core.events import EventBus
 from app.api.routers import students, attendance, assessments, tasks, cases
 from app.services.llm_service import get_llm_service
 
@@ -33,6 +34,11 @@ app = FastAPI(
     docs_url="/docs" if settings.app_env != "production" else None,
     redoc_url="/redoc" if settings.app_env != "production" else None,
 )
+
+# In-process domain event bus (ADR-001 ARCH-02) — available to routers via
+# Depends(get_event_bus); created at import time so tests without lifespan
+# still resolve it.
+app.state.event_bus = EventBus()
 
 # CORS
 app.add_middleware(

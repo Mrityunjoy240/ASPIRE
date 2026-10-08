@@ -64,6 +64,11 @@ These rules apply to ALL agents without exception.
 > periodic application scheduler (every 5 minutes) defined in `03_SYSTEM_SPEC.md §8.3` — DM-AG03 (FROZEN)**.
 > The Supervisor consumes them like any other event; scheduling logic never lives in agents.
 
+> [!NOTE]
+> `INTERVENTION_PLAN_APPROVED` (added to the catalog via `docs/decisions/ADR-002_INTERVENTION_PLAN_APPROVED_EVENT.md`)
+> has **no Supervisor trigger and no routing rule in v1** — it is an audit/follow-up notification event only.
+> If received, it falls through to `human_review_required: true` like any unmatched event.
+
 **Deterministic Routing Table:**
 
 | Event | Route |

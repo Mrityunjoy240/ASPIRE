@@ -33,6 +33,7 @@ ASPIRE is structured as ONE unified product ecosystem:
 | `docs/ASPIRE_APPLICATION_BOUNDARIES.md` | **FROZEN** Ecosystem model, Mother App (Web), Core Platform, OpenCode vs Android Studio boundaries |
 | `docs/ASPIRE_MOTHER_APPLICATION_SPECIFICATION.md` | **FROZEN** Mother Application role workspaces, management capabilities & UX |
 | `docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md` | **FROZEN** Mother System architecture specification |
+| `docs/decisions/ADR-002_INTERVENTION_PLAN_APPROVED_EVENT.md` | **ACCEPTED** `INTERVENTION_PLAN_APPROVED` domain event, payload & emission rule (amends 03 §8.2) |
 | `DESIGN.md` | **FROZEN** Linear-inspired UI/UX design system, semantic truth tokens, layout rules |
 | `docs/01_PRD.md` | Product scope, P0/P1 features, demo story |
 | `docs/02_USER_JOURNEYS.md` | User flows (student risk, mentor queue, data conflict) |
@@ -71,6 +72,7 @@ ASPIRE is structured as ONE unified product ecosystem:
 | ARCH-04 | Layered Modular Monolith inside FastAPI (ADR-001). |
 | OQ-AG02 | Asynchronous background execution for event-triggered agent workflows + synchronous ad-hoc endpoints (ADR-001). |
 | OQ-AG03 | In-process asyncio worker loop at startup + every 5 minutes (ADR-001). |
+| ADR-002 | `INTERVENTION_PLAN_APPROVED` is a distinct catalog event (mentor approval → case ACTIVE, emitted post-commit). `PLAN_ACCEPTED`/`PLAN_DECLINED` remain student-only. Audit action stays `PLAN_APPROVED_BY_MENTOR` (07 §4) and is separate from the event. |
 
 ---
 
@@ -98,13 +100,24 @@ ASPIRE is structured as ONE unified product ecosystem:
 
 ## Current Task
 
-**Application Boundaries & Ecosystem Ownership Frozen.** Created [`docs/ASPIRE_APPLICATION_BOUNDARIES.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/ASPIRE_APPLICATION_BOUNDARIES.md), updated [`AGENTS.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/AGENTS.md), [`README.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/README.md), and [`docs/AI_WORKING_STATE.md`](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/AI_WORKING_STATE.md).
+**Vertical Slice 1 — Mentor Plan Approval (DONE, branch `feature/vertical-slice-case-approval`).**
+Full loop: domain → API → UI → state change → event → audit → tests.
+
+Completed this slice:
+- **Docs (lead's contract-first sequence):** `docs/decisions/ADR-002_INTERVENTION_PLAN_APPROVED_EVENT.md` (payload, producer/consumer, emission rule); catalog row added to `docs/03_SYSTEM_SPEC.md §8.2`; no-consumer note in `docs/06_AGENT_SPEC.md` (Supervisor routing unchanged).
+- **Backend:** `app/core/events.py` (asyncio in-process bus, ARCH-02, Minimal Event Contract §8.1), `app/services/case_service.py` (sole owner of §10.2 mentor transitions; refuses non-`PENDING_APPROVAL` with 409; audit row via `log_audit` → commit → emit, rejection = audit only), `cases.py` approve endpoint now thin (fixed pre-existing bare-int raises + missing `StudentTask` import), `get_event_bus` dependency, `app.state.event_bus` at import, `CaseApproveRequest.decision` tightened to `Literal[...]`.
+- **UI:** `apps/web/app/lib/api.ts` (typed client, Bearer from `localStorage aspire_token` → `NEXT_PUBLIC_ASPIRE_DEV_TOKEN`, `NEXT_PUBLIC_API_URL`); queue page fetches live `/cases/queue` (demo-row fallback with visible notice), Approve button only on `PENDING_APPROVAL` rows, POSTs real approval, updates row to `ACTIVE`, surfaces errors honestly.
+- **Schema-conformance fix:** approval no longer writes `plan.status = "APPROVED"` (not in `PROPOSED|ACCEPTED|CUSTOMIZED|DECLINED|SUPERSEDED` — 05 §9 / migration 009); verdict stays in `mentor_decision`.
+- **Tests:** 46/46 (`tests/test_events.py` ×5, `tests/test_case_service.py` ×8, 7 new router tests incl. 200/401/403/404/400/409/422). `contracts/openapi.json` regenerated (11 paths; +409/+400 responses, decision enum).
+- **Gates:** typecheck 0 · lint 0 · build ✓ (7 routes) · pytest 46/46 · openapi drift test ✓.
+
+Known limitation (accepted): browser→API E2E needs the Supabase local stack (OQ-A02); verified via TestClient + contract tests here.
 
 ---
 
 ## Next Major Task
 
-**Define and implement the Mother Application (Web control/management environment in `apps/web`) + Core Platform as one coherent system.**
+**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. Also pending: Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
 
 ---
 
@@ -137,6 +150,7 @@ Native Android development is deferred to **Android Studio** after the shared co
 | OQ-08 | BCREC roll number format | Bishesh |
 | OQ-SS01 | `ATTENDANCE_WATCH` margin value — team must agree before implementing | All |
 | OQ-AG01 | Default production LLM model — must be selected via evaluation, not reputation | Mrityunjoy |
+| OQ-A02 | Browser→API E2E needs Supabase local stack (DB + JWKS); API verified via tests/contracts until then | Bishesh |
 
 ---
 
@@ -173,29 +187,28 @@ Native Android development is deferred to **Android Studio** after the shared co
 
 ## Verification
 
-Before claiming done:
-- [ ] No doc contradicts a frozen decision
-- [ ] `04_ARCHITECTURE.md` status reflects actual frozen state
-- [ ] `README.md` doc status table is accurate
-- [ ] `AGENTS.md` is concise and correct
-- [ ] `AI_WORKING_STATE.md` is complete
-- [ ] `git diff` has no accidental files
-- [ ] pushed to origin/master
+Before claiming a slice done:
+- [x] No doc contradicts a frozen decision
+- [x] Contract-first sequence followed (ADR → catalog → contracts → code)
+- [x] `AI_WORKING_STATE.md` complete and current
+- [x] `git diff` has no accidental files (`.opencode/`, `*.docx` excluded)
+- [x] typecheck / lint / build / pytest 46/46 / openapi drift test all green
+- [ ] pushed to origin (this slice branch)
 
 ---
 
 ## Git State
 
-- **Branch:** `master` (canonical branch rename to `main` deferred — E-07)
-- **Remote:** `origin` → `https://github.com/Mrityunjoy240/ASPIRE.git`
-- **Local ahead of origin:** 12 commits (unpushed — will be pushed in this task)
-- **Untracked:** `.opencode/` (partially gitignored per `.gitignore`), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx` (explicitly kept)
+- **Branch:** `feature/vertical-slice-case-approval` (created from `feature/frontend-ui-core` @ `82a36d8`)
+- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — slice commit pushed on this branch
+- **Prior UI batch:** `82a36d8` on `feature/frontend-ui-core` (32 files)
+- **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx`
 
 ---
 
 ## Handoff Notes
 
-- The 12 unpushed local commits contain all the frozen decisions (DM-*). They are NOT yet on GitHub. Push is the final step of this task.
-- `docs/10_TASKS.md` references LangGraph in task prompts (T-000 onward). These prompts were written before the tech-selection reset. The team lead must review task prompts before the Mother System architecture is frozen — do not treat OpenCode prompts in `10_TASKS.md` as frozen implementation instructions.
-- `docs/04_ARCHITECTURE.md` is marked `🔴 DRAFT` but contains many frozen decisions. Its status should be `🟡 UNDER REVIEW` at minimum.
-- `docs/decisions/` directory is empty. Frozen decisions are embedded in `04_ARCHITECTURE.md` as inline ADRs. This is acceptable for now.
+- `docs/decisions/` is no longer empty (ADR-001, ADR-002). Adding any new catalog event requires the lead's sequence: ADR → `03 §8.2` row → agent-contract check → code.
+- The approve endpoint now enforces `03 §10.2` (409 on illegal transitions) and no longer writes an `APPROVED` plan status (not in 05 §9 / migration 009); the verdict lives in `mentor_decision`.
+- `docs/10_TASKS.md` task prompts predate the tech-selection reset — team lead must review before treating them as frozen implementation instructions.
+- `docs/04_ARCHITECTURE.md` is marked `RED DRAFT` but contains many frozen decisions; status should be `UNDER REVIEW` at minimum.

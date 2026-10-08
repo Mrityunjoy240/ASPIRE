@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.events import EventBus
 from app.models.users import User, UserRoleAssignment
 from app.models.enums import UserRole
 
@@ -254,3 +255,12 @@ async def log_audit(
         created_at=datetime.now(timezone.utc),
     )
     session.add(log)
+
+
+def get_event_bus(request: Request) -> EventBus:
+    """In-process domain event bus (ADR-001 ARCH-02), created at app import time."""
+    bus = getattr(request.app.state, "event_bus", None)
+    if bus is None:
+        bus = EventBus()
+        request.app.state.event_bus = bus
+    return bus

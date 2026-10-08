@@ -3,7 +3,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -156,7 +156,7 @@ class CaseQueueItemResponse(BaseModel):
 
 class CaseApproveRequest(BaseModel):
     mentor_notes: Optional[str] = None
-    decision: str  # APPROVED | EDITED | REJECTED
+    decision: Literal["APPROVED", "EDITED", "REJECTED"]
 
 
 class CaseApproveResponse(BaseModel):
