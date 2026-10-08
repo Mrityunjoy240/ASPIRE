@@ -498,7 +498,7 @@
           "Intervention Cases"
         ],
         "summary": "Mentor human-in-the-loop approval",
-        "description": "Mentor approves/edits/rejects intervention plan.\n\nTransition ownership and event emission live in the Case Approval\nService (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then\nINTERVENTION_PLAN_APPROVED for approval decisions.",
+        "description": "Mentor approves/edits/rejects intervention plan.\n\nTransition ownership, plan selection and event emission live in the Case\nApproval Service (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then\nINTERVENTION_PLAN_APPROVED for approval decisions only.",
         "operationId": "approve_case_api_v1_cases__case_id__approve_post",
         "security": [
           {
@@ -539,10 +539,10 @@
             }
           },
           "409": {
-            "description": "Case not in PENDING_APPROVAL (03_SYSTEM_SPEC §10.2)"
+            "description": "Case not in PENDING_APPROVAL, or multiple plans await a mentor decision (03_SYSTEM_SPEC §10.2)"
           },
           "400": {
-            "description": "No plan exists for this case"
+            "description": "No plan awaiting mentor decision for this case"
           },
           "422": {
             "description": "Validation Error",

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
@@ -32,6 +33,12 @@ _MENTOR_DECISIONS: dict[str, dict[str, str | None]] = {
 
 # Decisions that emit INTERVENTION_PLAN_APPROVED (ADR-002 emission rule).
 _APPROVAL_DECISIONS = frozenset({"APPROVED", "EDITED"})
+
+# Plan statuses that can be awaiting a mentor verdict in PENDING_APPROVAL:
+# ADR-002 §5 — the plan is "already ACCEPTED/CUSTOMIZED by the student step"
+# and carries no mentor_decision yet. Declined/superseded/proposed/decided
+# plans are history, never the authoritative target.
+_AWAITING_PLAN_STATUSES = frozenset({"ACCEPTED", "CUSTOMIZED"})
 
 _AUDIT_ACTIONS: dict[str, str] = {
     "APPROVED": "PLAN_APPROVED_BY_MENTOR",
@@ -61,17 +68,25 @@ async def approve_plan(
     session: AsyncSession,
     *,
     case: InterventionCase,
-    plan: InterventionPlan,
+    plans: Sequence[InterventionPlan],
     decision: str,
     mentor_notes: str | None,
     actor_id: UUID,
     event_bus: EventBus | None = None,
 ) -> CaseApprovalResult:
-    """Apply a mentor decision to a plan in PENDING_APPROVAL.
+    """Apply a mentor decision to the plan awaiting approval in PENDING_APPROVAL.
 
-    Sequence (ADR-002): validate → transition (§10.2) → audit row → commit →
-    emit INTERVENTION_PLAN_APPROVED (approval decisions only). The audit row
-    is written independently of the domain event.
+    Sequence (ADR-002): validate decision → validate state (§10.2) → select the
+    authoritative plan → transition → audit row → commit → emit
+    INTERVENTION_PLAN_APPROVED (approval decisions only). The audit row is
+    written independently of the domain event.
+
+    Plan selection (F-01): plan history is expected (replan cycles append
+    plans), so exactly one plan may be awaiting the mentor verdict —
+    status ACCEPTED/CUSTOMIZED with no mentor_decision yet (ADR-002 §5).
+    Zero such plans → NO_PLAN (400). More than one → AMBIGUOUS_PLAN (409):
+    §10.2 defines a single transition for a single plan, so ambiguous data is
+    refused rather than resolved by picking an arbitrary row.
     """
     mapping = _MENTOR_DECISIONS.get(decision)
     if mapping is None:
@@ -89,6 +104,26 @@ async def approve_plan(
                 f"{InterventionCaseStatus.PENDING_APPROVAL.value} (03_SYSTEM_SPEC §10.2)"
             ),
         )
+
+    awaiting = [
+        p
+        for p in plans
+        if p.status in _AWAITING_PLAN_STATUSES and p.mentor_decision is None
+    ]
+    if not awaiting:
+        raise CaseApprovalError(
+            "NO_PLAN",
+            f"No plan awaiting a mentor decision for case {case.id}",
+        )
+    if len(awaiting) > 1:
+        raise CaseApprovalError(
+            "AMBIGUOUS_PLAN",
+            (
+                f"Case {case.id} has {len(awaiting)} plans awaiting a mentor decision; "
+                "§10.2 permits exactly one (03_SYSTEM_SPEC §10.2)"
+            ),
+        )
+    plan = awaiting[0]
 
     previous_state = {
         "case_id": str(case.id),

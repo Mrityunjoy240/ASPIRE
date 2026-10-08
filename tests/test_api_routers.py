@@ -258,10 +258,20 @@ def _case_and_plan(case_id: uuid.UUID, mentor_id: uuid.UUID, status):
 
 
 def _result_returning(*values):
+    """Sequential execute() results: first value = case query, second = plan
+    list query (the router fetches plan history via .scalars().all())."""
     mocks = []
     for value in values:
         m = MagicMock()
-        m.scalar_one_or_none.return_value = value
+        if value is None:
+            m.scalar_one_or_none.return_value = None
+            m.scalars.return_value.all.return_value = []
+        elif isinstance(value, list):
+            m.scalar_one_or_none.return_value = value[0] if value else None
+            m.scalars.return_value.all.return_value = value
+        else:
+            m.scalar_one_or_none.return_value = value
+            m.scalars.return_value.all.return_value = [value]
         mocks.append(m)
     return AsyncMock(side_effect=mocks)
 
@@ -281,7 +291,7 @@ def test_approve_happy_path_emits_event(approve_deps, client, mock_mentor_auth):
     session.add = MagicMock()
     case_id = uuid4()
     case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)
-    session.execute = _result_returning(case, plan)
+    session.execute = _result_returning(case, [plan])
     _override_auth_and_session(approve_deps, mock_mentor_auth, session)
 
     bus = main_app.state.event_bus
@@ -326,7 +336,7 @@ def test_approve_reject_decision_no_event(approve_deps, client, mock_mentor_auth
     session.add = MagicMock()
     case_id = uuid4()
     case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)
-    session.execute = _result_returning(case, plan)
+    session.execute = _result_returning(case, [plan])
     _override_auth_and_session(approve_deps, mock_mentor_auth, session)
 
     bus = main_app.state.event_bus
@@ -385,7 +395,7 @@ def test_approve_409_illegal_transition(approve_deps, client, mock_mentor_auth):
     session.add = MagicMock()
     case_id = uuid4()
     case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id, InterventionCaseStatus.ACTIVE)
-    session.execute = _result_returning(case, plan)
+    session.execute = _result_returning(case, [plan])
     _override_auth_and_session(approve_deps, mock_mentor_auth, session)
 
     response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
@@ -400,6 +410,204 @@ def test_approve_422_invalid_decision(approve_deps, client, mock_mentor_auth):
 
     response = client.post(f"/api/v1/cases/{uuid4()}/approve", json={"decision": "MAYBE"})
     assert response.status_code == 422
+
+
+# ---- P1 remediation regressions (F-01 / F-03) ----
+
+def _plan(case_id, *, status="ACCEPTED", mentor_decision=None, days_ago=0):
+    now = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    return InterventionPlan(
+        id=uuid4(),
+        case_id=case_id,
+        created_by="SYSTEM_AGENT",
+        status=status,
+        plan_actions=[],
+        reason_codes=[],
+        evidence={},
+        mentor_decision=mentor_decision,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def test_f01_approve_with_plan_history_selects_pending(approve_deps, client, mock_mentor_auth):
+    """Replan history (declined + superseded) plus the current awaiting plan →
+    the current plan is decided; history untouched. The cb300da implementation
+    called scalar_one_or_none() here and 500'd with MultipleResultsFound on a
+    real database (proven); with mocks it decided an arbitrary historical row."""
+    from app.main import app as main_app
+    from app.services.case_service import EVENT_INTERVENTION_PLAN_APPROVED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(case_id, mock_mentor_auth.user_id,
+                             InterventionCaseStatus.PENDING_APPROVAL)
+    old_declined = _plan(case_id, status="DECLINED", mentor_decision="REJECTED", days_ago=10)
+    old_superseded = _plan(case_id, status="SUPERSEDED", days_ago=5)
+    current = _plan(case_id, status="ACCEPTED", days_ago=1)
+    session.execute = _result_returning(case, [old_declined, old_superseded, current])
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_INTERVENTION_PLAN_APPROVED, recorder)
+    try:
+        response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    assert response.json()["mentor_decision"] == "APPROVED"
+    assert current.mentor_decision == "APPROVED"          # authoritative plan decided
+    assert old_declined.mentor_decision == "REJECTED"     # history untouched
+    assert old_superseded.mentor_decision is None
+    assert case.status == InterventionCaseStatus.ACTIVE
+    assert len(received) == 1
+    session.add.assert_called_once()
+    audit = session.add.call_args[0][0]
+    assert audit.entity_id == current.id
+    assert audit.previous_state["case_status"] == "PENDING_APPROVAL"
+    assert audit.new_state["case_status"] == "ACTIVE"
+
+
+def test_f01_ambiguous_pending_plans_return_409(approve_deps, client, mock_mentor_auth):
+    """Two plans both awaiting the verdict → §10.2 allows one transition only:
+    refuse instead of picking an arbitrary row. No audit, no event, no commit."""
+    from app.main import app as main_app
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(case_id, mock_mentor_auth.user_id,
+                             InterventionCaseStatus.PENDING_APPROVAL)
+    session.execute = _result_returning(case, [_plan(case_id), _plan(case_id, days_ago=1)])
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    try:
+        response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    finally:
+        bus.clear()
+
+    assert response.status_code == 409
+    assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_f03_case_row_selected_for_update(approve_deps, client, mock_mentor_auth):
+    """F-03: the approve path locks the case row (PostgreSQL row-level lock) so
+    concurrent approvals serialize and exactly one observes PENDING_APPROVAL."""
+    from sqlalchemy.dialects import postgresql
+
+    from app.api.routers.cases import _case_for_approval_query
+
+    sql = str(
+        _case_for_approval_query(uuid4()).compile(dialect=postgresql.dialect())
+    )
+    assert "FOR UPDATE" in sql.upper()
+
+
+def test_f03_double_approval_only_one_transition_wins(approve_deps, client, mock_mentor_auth):
+    """Two approval attempts for the same case: request A commits, then request
+    B observes A's committed state — exactly what FOR UPDATE forces B to read
+    after blocking on A's lock. Asserts: one state transition, one approval
+    event, one authoritative audit row with correct states, B receives 409."""
+    from app.main import app as main_app
+    from app.services.case_service import EVENT_INTERVENTION_PLAN_APPROVED
+
+    case_id = uuid4()
+    case, plan = _case_and_plan(case_id, mock_mentor_auth.user_id,
+                                InterventionCaseStatus.PENDING_APPROVAL)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_INTERVENTION_PLAN_APPROVED, recorder)
+    try:
+        # --- Request A (acquires the FOR UPDATE lock) ---
+        session_a = AsyncMock()
+        session_a.add = MagicMock()
+        session_a.execute = _result_returning(case, [plan])
+        _override_auth_and_session(approve_deps, mock_mentor_auth, session_a)
+
+        resp_a = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+        assert resp_a.status_code == 200
+        assert case.status == InterventionCaseStatus.ACTIVE
+        assert session_a.add.call_args[0][0].action_type == "PLAN_APPROVED_BY_MENTOR"
+        assert session_a.add.call_args[0][0].previous_state["case_status"] == "PENDING_APPROVAL"
+        assert session_a.add.call_args[0][0].new_state["case_status"] == "ACTIVE"
+
+        # --- Request B (blocked until A committed; reads post-A state) ---
+        session_b = AsyncMock()
+        session_b.add = MagicMock()
+        session_b.execute = _result_returning(case, [plan])
+        _override_auth_and_session(approve_deps, mock_mentor_auth, session_b)
+
+        resp_b = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+        assert resp_b.status_code == 409
+        assert "PENDING_APPROVAL" in resp_b.json()["detail"]
+    finally:
+        bus.clear()
+
+    # Only A transitioned, audited and published
+    assert len(received) == 1
+    assert received[0].event_type == "INTERVENTION_PLAN_APPROVED"
+    assert received[0].payload["previous_status"] == "PENDING_APPROVAL"
+    assert session_a.add.call_count == 1
+    session_b.add.assert_not_called()
+    session_b.commit.assert_not_awaited()
+    assert case.status == InterventionCaseStatus.ACTIVE
+    assert plan.mentor_decision == "APPROVED"
+
+
+def test_f01_router_plan_query_survives_plan_history_real_db():
+    """Real SQLAlchemy execution of the exact router plan query: the old
+    scalar_one_or_none() shape raises MultipleResultsFound on plan history
+    (the cb300da 500); the fixed shape returns the full history for the
+    service to select from."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.exc import MultipleResultsFound
+    from sqlalchemy.orm import Session
+
+    from app.api.routers.cases import _plans_for_case_query
+    from app.core.database import Base
+
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(
+        engine,
+        tables=[InterventionCase.__table__, InterventionPlan.__table__],
+    )
+    now = datetime.now(timezone.utc)
+    case_id = uuid4()
+    with Session(engine) as db:
+        db.add(InterventionCase(
+            id=case_id, student_id=uuid4(), mentor_id=uuid4(),
+            status=InterventionCaseStatus.PENDING_APPROVAL, urgency_band="URGENT",
+            opened_at=now, created_at=now, updated_at=now,
+        ))
+        db.add(_plan(case_id, status="DECLINED", mentor_decision="REJECTED", days_ago=5))
+        db.add(_plan(case_id, status="ACCEPTED", days_ago=1))
+        db.commit()
+
+        old_shape = _plans_for_case_query(case_id)
+        with pytest.raises(MultipleResultsFound):
+            db.execute(old_shape).scalar_one_or_none()
+
+        plans = list(db.execute(_plans_for_case_query(case_id)).scalars().all())
+        assert len(plans) == 2
+        assert plans[0].status == "ACCEPTED"  # created_at DESC ordering
 
 
 # ============ OpenAPI Contract Tests ============

@@ -324,7 +324,7 @@ Every event name in `06_AGENT_SPEC.md` triggers must match exactly the names bel
 | `TASK_OVERDUE` | Task Scheduler | Deadline crossed, task still PENDING |
 | `PLAN_ACCEPTED` | Student Action Service | Student accepts plan |
 | `PLAN_DECLINED` | Student Action Service | Student declines plan |
-| `INTERVENTION_PLAN_APPROVED` | Case Approval Service | Mentor approves/edits/rejects a plan — published after commit. Added via [ADR-002](decisions/ADR-002_INTERVENTION_PLAN_APPROVED_EVENT.md). No v1 agent trigger. |
+| `INTERVENTION_PLAN_APPROVED` | Case Approval Service | Emitted only after a mentor approval (decision APPROVED/EDITED) commits the `PENDING_APPROVAL → ACTIVE` transition. Mentor rejection: audit only — no domain event. Added via [ADR-002](decisions/ADR-002_INTERVENTION_PLAN_APPROVED_EVENT.md) §2/§5. No v1 agent trigger. |
 | `QUIZ_COMPLETED` | Learning Service | Student submits quiz |
 | `DATA_CONFLICT` | Ingestion Engine | Conflict detected on import |
 | `MENTOR_FOLLOWUP_DUE` | Follow-up Scheduler | Per intervention policy |

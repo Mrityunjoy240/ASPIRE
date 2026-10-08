@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from uuid import UUID
 
 from app.models.enums import TaskStatus
 from app.models.tasks import StudentTask
@@ -25,6 +26,17 @@ class TaskUrgency:
     days_until_deadline: int | None
     is_overdue: bool
     explicit_priority: int | None
+
+
+@dataclass(frozen=True)
+class QueueEntry:
+    """One mentor-queue row as required by DM-SS03 ordering (03 §6.2)."""
+
+    case_id: UUID
+    urgency_band: str  # URGENT | ATTENTION | MONITOR
+    exam_days_remaining: int | None
+    days_since_last_mentor_action: int | None
+    created_at: datetime | None
 
 
 class PriorityEngine:
@@ -129,35 +141,44 @@ class PriorityEngine:
         scored.sort(key=sort_key)
         return [t for t, _ in scored]
 
-    def sort_mentor_queue(
-        self,
-        cases: list[dict],  # {case, student_tasks, last_mentor_action_days}
-    ) -> list[dict]:
+    def sort_mentor_queue(self, entries: list[QueueEntry]) -> list[QueueEntry]:
+        """Canonical DM-SS03 mentor-queue ordering (03 §6.2 FROZEN / OQ-SS03).
+
+        Single source of truth: the API returns this order; clients must not
+        re-rank it (AGENTS: no duplicated business logic in clients).
+
+        Key sequence:
+        1. Urgency Band: URGENT > ATTENTION > MONITOR (unknown band last).
+        2. URGENT only: exam_days_remaining ASC, NULLS LAST.
+        3. All bands: days_since_last_mentor_action DESC, NULLS FIRST
+           (outside URGENT this is the primary in-band key; exam proximity
+           is NOT a sort key in ATTENTION/MONITOR).
+        4. Tie-breakers (every band): created_at ASC, then case_id ASC.
+        data_staleness_hours is badge/display-only and never a sort key.
         """
-        Sort mentor queue per DM-SS03:
-        1. Urgency Band (URGENT > ATTENTION > MONITOR)
-        2. Exam Proximity (nearest exam first)
-        3. Days Since Last Mentor Action (staleness badge, not sort key)
-        """
-        def urgency_rank(band: UrgencyBand) -> int:
-            return {"URGENT": 0, "ATTENTION": 1, "MONITOR": 2}[band.value]
+        far = datetime.max.replace(tzinfo=UTC)
+        band_rank = {"URGENT": 0, "ATTENTION": 1, "MONITOR": 2}
 
-        def sort_key(item):
-            case = item["case"]
-            # Get highest urgency band among student's tasks
-            max_band = UrgencyBand.MONITOR
-            for task_data in item.get("student_tasks", []):
-                if task_data.get("urgency_band"):
-                    band = UrgencyBand(task_data["urgency_band"])
-                    if urgency_rank(band) < urgency_rank(max_band):
-                        max_band = band
+        def sort_key(entry: QueueEntry) -> tuple:
+            band = band_rank.get(entry.urgency_band, 3)
+            if entry.urgency_band == "URGENT":
+                exam_key = (
+                    (1, 0)
+                    if entry.exam_days_remaining is None
+                    else (0, entry.exam_days_remaining)
+                )
+            else:
+                # Exam proximity does not influence ATTENTION/MONITOR (§6.2).
+                exam_key = (0, 0)
+            days = entry.days_since_last_mentor_action
+            days_key = (0, 0) if days is None else (1, -days)
+            created = entry.created_at
+            if created is None:
+                created_key = far
+            elif created.tzinfo is None:
+                created_key = created.replace(tzinfo=UTC)
+            else:
+                created_key = created
+            return (band, exam_key, days_key, created_key, str(entry.case_id))
 
-            # Exam proximity (earliest exam date)
-            exam_date = case.get("nearest_exam_date")
-            exam_days = 999
-            if exam_date:
-                exam_days = (exam_date - datetime.now(UTC)).days
-
-            return (urgency_rank(max_band), exam_days)
-
-        return sorted(cases, key=sort_key)
+        return sorted(entries, key=sort_key)

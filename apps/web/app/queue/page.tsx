@@ -14,7 +14,24 @@ type QueueRow = CaseQueueItem & {
   source: "live" | "demo";
 };
 
+// Authored in canonical DM-SS03 order (03 §6.2): URGENT by exam ASC (NULL last),
+// then ATTENTION by days-since-action DESC (NULL first), then MONITOR; never
+// re-ranked in the client.
 const DEMO_ROWS: QueueRow[] = [
+  {
+    case_id: "CAS-BCREC-2026-0025",
+    student_id: "00000000-0000-0000-0000-000000000025",
+    student_name: "Arjun Mehta",
+    student_roll: "BCREC-ME-2026-042",
+    urgency_band: "URGENT",
+    attendance: 65.4,
+    status: "ESCALATION_REQUIRED",
+    trigger_events: ["ATTENDANCE_RISK", "ASSESSMENT_TREND_DECLINING", "EXAM_APPROACHING"],
+    opened_at: "2026-10-02T10:00:00Z",
+    nearest_exam_days: 3,
+    days_since_last_action: 5,
+    source: "demo",
+  },
   {
     case_id: "CAS-BCREC-2026-0042",
     student_id: "00000000-0000-0000-0000-000000000042",
@@ -44,17 +61,17 @@ const DEMO_ROWS: QueueRow[] = [
     source: "demo",
   },
   {
-    case_id: "CAS-BCREC-2026-0035",
-    student_id: "00000000-0000-0000-0000-000000000035",
-    student_name: "Priya Singh",
-    student_roll: "BCREC-CS-2026-029",
+    case_id: "CAS-BCREC-2026-0022",
+    student_id: "00000000-0000-0000-0000-000000000022",
+    student_name: "Kavya Nair",
+    student_roll: "BCREC-CS-2026-033",
     urgency_band: "ATTENTION",
-    attendance: 78.2,
-    status: "IN_REVIEW",
+    attendance: 79.5,
+    status: "ACTIVE",
     trigger_events: ["ASSESSMENT_TREND_DECLINING"],
-    opened_at: "2026-10-05T11:15:00Z",
-    nearest_exam_days: 15,
-    days_since_last_action: 2,
+    opened_at: "2026-10-01T13:30:00Z",
+    nearest_exam_days: 18,
+    days_since_last_action: 6,
     source: "demo",
   },
   {
@@ -72,6 +89,20 @@ const DEMO_ROWS: QueueRow[] = [
     source: "demo",
   },
   {
+    case_id: "CAS-BCREC-2026-0035",
+    student_id: "00000000-0000-0000-0000-000000000035",
+    student_name: "Priya Singh",
+    student_roll: "BCREC-CS-2026-029",
+    urgency_band: "ATTENTION",
+    attendance: 78.2,
+    status: "IN_REVIEW",
+    trigger_events: ["ASSESSMENT_TREND_DECLINING"],
+    opened_at: "2026-10-05T11:15:00Z",
+    nearest_exam_days: 15,
+    days_since_last_action: 2,
+    source: "demo",
+  },
+  {
     case_id: "CAS-BCREC-2026-0028",
     student_id: "00000000-0000-0000-0000-000000000028",
     student_name: "Sneha Reddy",
@@ -83,34 +114,6 @@ const DEMO_ROWS: QueueRow[] = [
     opened_at: "2026-10-03T16:20:00Z",
     nearest_exam_days: 22,
     days_since_last_action: 4,
-    source: "demo",
-  },
-  {
-    case_id: "CAS-BCREC-2026-0025",
-    student_id: "00000000-0000-0000-0000-000000000025",
-    student_name: "Arjun Mehta",
-    student_roll: "BCREC-ME-2026-042",
-    urgency_band: "URGENT",
-    attendance: 65.4,
-    status: "ESCALATION_REQUIRED",
-    trigger_events: ["ATTENDANCE_RISK", "ASSESSMENT_TREND_DECLINING", "EXAM_APPROACHING"],
-    opened_at: "2026-10-02T10:00:00Z",
-    nearest_exam_days: 3,
-    days_since_last_action: 5,
-    source: "demo",
-  },
-  {
-    case_id: "CAS-BCREC-2026-0022",
-    student_id: "00000000-0000-0000-0000-000000000022",
-    student_name: "Kavya Nair",
-    student_roll: "BCREC-CS-2026-033",
-    urgency_band: "ATTENTION",
-    attendance: 79.5,
-    status: "ACTIVE",
-    trigger_events: ["ASSESSMENT_TREND_DECLINING"],
-    opened_at: "2026-10-01T13:30:00Z",
-    nearest_exam_days: 18,
-    days_since_last_action: 6,
     source: "demo",
   },
 ];
@@ -185,16 +188,9 @@ export default function QueuePage() {
     }
   }
 
-  // Sort per DM-SS03: Urgency Band → Exam Proximity → Days Since Last Action
-  const urgencyRank: Record<UrgencyVariant, number> = { critical: 0, warning: 1, monitor: 2 };
-  const sortedQueue = [...rows].sort((a, b) => {
-    const urgencyDiff = urgencyRank[mapUrgency(a.urgency_band)] - urgencyRank[mapUrgency(b.urgency_band)];
-    if (urgencyDiff !== 0) return urgencyDiff;
-    const examDiff = (a.nearest_exam_days ?? 999) - (b.nearest_exam_days ?? 999);
-    if (examDiff !== 0) return examDiff;
-    return (a.days_since_last_action ?? 999) - (b.days_since_last_action ?? 999);
-  });
-
+  // DM-SS03 ordering is computed by the API (single source of truth — clients
+  // must not re-rank the mentor workload queue). Rows render in received order;
+  // DEMO_ROWS below are authored already in DM-SS03 order.
   const criticalCount = rows.filter(r => mapUrgency(r.urgency_band) === "critical").length;
   const warningCount = rows.filter(r => mapUrgency(r.urgency_band) === "warning").length;
   const resolvedCount = 12; // mock
@@ -257,7 +253,7 @@ export default function QueuePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.04]">
-                {sortedQueue.map((caseItem) => {
+                {rows.map((caseItem) => {
                   const urgency = mapUrgency(caseItem.urgency_band);
                   const canApprove = caseItem.status === "PENDING_APPROVAL";
                   const isApproving = pendingId === caseItem.case_id;

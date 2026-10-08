@@ -3,7 +3,7 @@
 **STATUS: ✅ ACCEPTED — Team Lead directive (Mrityunjoy Kapat), 08 October 2026**
 **Date:** 08 October 2026
 **Author:** OpenCode (implementation agent)
-**Amends:** `docs/03_SYSTEM_SPEC.md §8.1–8.2` (Canonical Event Catalog) — via this documented decision only (DM process per team lead directive)
+**Amends:** `docs/03_SYSTEM_SPEC.md §8.2` (Canonical Event Catalog) — via this documented decision only (DM process per team lead directive)
 
 ---
 

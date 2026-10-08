@@ -2,9 +2,9 @@
 # Engine unit tests (deterministic, no I/O, no LLM)
 
 import pytest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.models.enums import AttendanceStatus, TaskStatus, TaskSourceType, AssessmentSubmissionStatus
 from app.models.attendance import AttendanceRecord
@@ -12,7 +12,7 @@ from app.models.assessment import AssessmentComponent, AssessmentSubmission
 from app.models.tasks import StudentTask
 from app.engines.attendance import AttendanceEngine, AttendanceConfig
 from app.engines.assessment import AssessmentEngine, AssessmentScheme
-from app.engines.priority import PriorityEngine, UrgencyBand
+from app.engines.priority import PriorityEngine, QueueEntry, UrgencyBand
 from app.engines.tasks import TaskEngine
 
 
@@ -350,6 +350,110 @@ class TestTaskEngine:
     async def test_create_and_complete(self):
         # Would need real DB session - skipped for unit test
         pass
+
+
+class TestDMSS03PriorityQueue:
+    """Frozen PQ fixtures — docs/08_EVALS.md §9 (DM-SS03 / OQ-SS03 Option A).
+
+    These must pass for the Mentor Queue (T-061) to be mergeable. They assert
+    the canonical ordering rule of 03 §6.2 against PriorityEngine.sort_mentor_queue,
+    the single source of truth the API uses.
+    """
+
+    _NOW = datetime(2026, 10, 8, 12, 0, 0, tzinfo=timezone.utc)
+
+    @staticmethod
+    def entry(band, exam, days, cid, created_ago_days=0, case_uuid=None):
+        return QueueEntry(
+            case_id=case_uuid or uuid4(),
+            urgency_band=band,
+            exam_days_remaining=exam,
+            days_since_last_mentor_action=days,
+            created_at=TestDMSS03PriorityQueue._NOW - timedelta(days=created_ago_days),
+        )
+
+    @staticmethod
+    def order(entries):
+        engine = PriorityEngine()
+        return [e.case_id for e in engine.sort_mentor_queue(entries)]
+
+    def test_pq01_band_decided_first(self):
+        """PQ-01: URGENT beats ATTENTION even when ATTENTION has a nearer exam."""
+        a = self.entry("URGENT", 5, 0, "A", created_ago_days=2)
+        b = self.entry("ATTENTION", 1, 4, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+
+    def test_pq02_staleness_is_not_a_sort_key(self):
+        """PQ-02: data_staleness_hours must not affect ordering — with all sort
+        keys equal, output is identical to the (created_at-ordered) input.
+        QueueEntry carries no staleness field, so staleness is structurally
+        incapable of becoming a key (badge/display-only per §6.2)."""
+        a = self.entry("URGENT", 5, 3, "A", created_ago_days=2)
+        b = self.entry("URGENT", 5, 3, "B", created_ago_days=1)
+        assert self.order([a, b]) == [a.case_id, b.case_id]
+
+    def test_pq03_older_untouched_first(self):
+        """PQ-03: URGENT, same exam → mentor acted 10d ago beats 1d ago (DESC)."""
+        a = self.entry("URGENT", 5, 10, "A", created_ago_days=2)
+        b = self.entry("URGENT", 5, 1, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+
+    def test_pq04_nearer_exam_beats_farther(self):
+        """PQ-04: URGENT exam proximity ASC (3 days before 10 days)."""
+        a = self.entry("URGENT", 3, 5, "A", created_ago_days=2)
+        b = self.entry("URGENT", 10, 5, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+
+    def test_pq05_known_exam_beats_null_exam(self):
+        """PQ-05: NULLS LAST within URGENT exam proximity."""
+        a = self.entry("URGENT", 5, 5, "A", created_ago_days=2)
+        b = self.entry("URGENT", None, 5, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+
+    def test_pq06_null_days_sorts_first(self):
+        """PQ-06: NULLS FIRST for days_since_last_mentor_action (never acted on)."""
+        a = self.entry("URGENT", 5, None, "A", created_ago_days=2)
+        b = self.entry("URGENT", 5, 1, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+
+    def test_pq07_exam_ignored_in_attention(self):
+        """PQ-07: exam proximity must be ignored in ATTENTION — order as if the
+        exam field does not exist (created_at decides). Literal fixture (A
+        nearer exam) plus the discriminating swap where the old cb300da/82a36d8
+        sort put B first by wrongly applying exam proximity."""
+        a = self.entry("ATTENTION", 2, 3, "A", created_ago_days=2)
+        b = self.entry("ATTENTION", 30, 3, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+        # discriminating swap: B has the nearer exam — must NOT reorder
+        a2 = self.entry("ATTENTION", 30, 3, "A", created_ago_days=2)
+        b2 = self.entry("ATTENTION", 2, 3, "B", created_ago_days=1)
+        assert self.order([b2, a2]) == [a2.case_id, b2.case_id]
+
+    def test_pq08_exam_ignored_in_monitor(self):
+        """PQ-08: exam proximity must be ignored in MONITOR."""
+        a = self.entry("MONITOR", 1, 7, "A", created_ago_days=2)
+        b = self.entry("MONITOR", 10, 7, "B", created_ago_days=1)
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+        a2 = self.entry("MONITOR", 10, 7, "A", created_ago_days=2)
+        b2 = self.entry("MONITOR", 1, 7, "B", created_ago_days=1)
+        assert self.order([b2, a2]) == [a2.case_id, b2.case_id]
+
+    def test_pq09_deterministic_tiebreakers(self):
+        """PQ-09: full tie → created_at ASC, then case_id ASC (input order must
+        not matter — the old sort had no tie-breakers and was nondeterministic)."""
+        a = self.entry("URGENT", 5, 3, "A", created_ago_days=1, case_uuid=UUID(int=1))
+        b = self.entry("URGENT", 5, 3, "B", created_ago_days=1, case_uuid=UUID(int=2))
+        assert self.order([b, a]) == [a.case_id, b.case_id]
+        assert self.order([a, b]) == [a.case_id, b.case_id]
+
+    def test_band_null_and_unknown_handling(self):
+        """Unknown band sorts after the three canonical bands; NULL exam in
+        URGENT never outranks a known exam (PQ-05 rule generalized)."""
+        urgent_known = self.entry("URGENT", 1, 0, "A", created_ago_days=3)
+        urgent_null = self.entry("URGENT", None, 0, "B", created_ago_days=2)
+        unknown = self.entry("STALE", None, None, "C", created_ago_days=1)
+        order = self.order([unknown, urgent_null, urgent_known])
+        assert order == [urgent_known.case_id, urgent_null.case_id, unknown.case_id]
 
 
 if __name__ == "__main__":

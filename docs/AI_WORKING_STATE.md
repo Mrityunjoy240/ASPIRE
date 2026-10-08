@@ -113,11 +113,20 @@ Completed this slice:
 
 Known limitation (accepted): browser→API E2E needs the Supabase local stack (OQ-A02); verified via TestClient + contract tests here.
 
+**P1 remediation of forensic audit (cb300da) — DONE this task, branch `feature/vertical-slice-case-approval`.**
+Forensic audit (`audit/vertical_slice_forensic_audit_cb300da.md`, verdict FAIL) found four P1s; all four fixed with regression tests that fail against the old implementations:
+- **F-01 (500 on plan history):** router fetches *all* plans via `_plans_for_case_query` (never `scalar_one_or_none`); Case Approval Service selects the single plan awaiting mentor verdict (`ACCEPTED|CUSTOMIZED` AND `mentor_decision IS NULL`, ADR-002 §5). 0 → `NO_PLAN` 400; >1 → `AMBIGUOUS_PLAN` 409 (§10.2 refuses ambiguity, never picks an arbitrary row). Validation order: decision → state → plan selection (double-approval attempt 2 → 409, not 400).
+- **F-02 (spec contradiction):** `03_SYSTEM_SPEC §8.2` catalog row now states emission happens only after APPROVED/EDITED commits `PENDING_APPROVAL → ACTIVE`; rejection = audit only. ADR-002 Amends line corrected to §8.2.
+- **F-03 (no row lock):** `_case_for_approval_query(...).with_for_update()` is the first execute in approve — PostgreSQL row lock serializes concurrent approvals; blocked second request re-reads committed state → 409. No new infra (no Redis/outbox). True 2-connection race needs Postgres (OQ-A02); covered by FOR UPDATE compile test + sequential double-approval test.
+- **F-04 (client/server sort divergence):** canonical DM-SS03 order now lives only in `PriorityEngine.sort_mentor_queue(list[QueueEntry])`; router builds entries, sorts, returns that order; queue page no longer re-ranks (renders as-is); `DEMO_ROWS` authored in canonical order. PQ-01…PQ-09 regression fixtures + band/NULL handling tests all pass; proof script shows old sorts fail PQ-03/06/07/08/09.
+- **Gates after remediation:** pytest **69/69** (+23) · typecheck 0 · lint 0 (ESLint) · build ✓ (6 routes) · OpenAPI regenerated + idempotent (409/400 description updates) · ruff per-file counts ≤ baseline (only style-consistent `timezone.utc` additions).
+- Remaining known findings are P2/P3 in the audit file (F-05…F-09, ~23 P3s) — **not fixed yet**, awaiting team-lead prioritization.
+
 ---
 
 ## Next Major Task
 
-**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. Also pending: Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
+**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. Also pending: P2/P3 remediation from `audit/vertical_slice_forensic_audit_cb300da.md` (F-05 plan-status validation, F-06 client gating, F-07 test gaps, F-08 `trigger_events` type mismatch, F-09 CI lacks pytest/drift), Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
 
 ---
 
@@ -188,21 +197,21 @@ Native Android development is deferred to **Android Studio** after the shared co
 ## Verification
 
 Before claiming a slice done:
-- [x] No doc contradicts a frozen decision
+- [x] No doc contradicts a frozen decision (F-02 catalog row + ADR-002 Amends line corrected)
 - [x] Contract-first sequence followed (ADR → catalog → contracts → code)
 - [x] `AI_WORKING_STATE.md` complete and current
 - [x] `git diff` has no accidental files (`.opencode/`, `*.docx` excluded)
-- [x] typecheck / lint / build / pytest 46/46 / openapi drift test all green
-- [ ] pushed to origin (this slice branch)
+- [x] typecheck / lint / build / pytest 69/69 / openapi drift test all green
+- [x] pushed to origin (this slice branch) — P1 remediation commit pushed
 
 ---
 
 ## Git State
 
 - **Branch:** `feature/vertical-slice-case-approval` (created from `feature/frontend-ui-core` @ `82a36d8`)
-- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — slice commit pushed on this branch
+- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — slice commit `cb300da`, then P1 remediation commit (`fix(core): remediate vertical slice P1 findings`) both pushed on this branch
 - **Prior UI batch:** `82a36d8` on `feature/frontend-ui-core` (32 files)
-- **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx`
+- **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx`, `audit/` (forensic audit — staged with remediation if lead wants it versioned)
 
 ---
 
@@ -210,5 +219,7 @@ Before claiming a slice done:
 
 - `docs/decisions/` is no longer empty (ADR-001, ADR-002). Adding any new catalog event requires the lead's sequence: ADR → `03 §8.2` row → agent-contract check → code.
 - The approve endpoint now enforces `03 §10.2` (409 on illegal transitions) and no longer writes an `APPROVED` plan status (not in 05 §9 / migration 009); the verdict lives in `mentor_decision`.
+- After P1 remediation: plan history is expected on cases — the router passes *all* plans to the service, which selects the awaiting one (`ACCEPTED/CUSTOMIZED` + `mentor_decision IS NULL`). Do not reintroduce `scalar_one_or_none` on plan queries.
+- Queue order is computed server-side only (`PriorityEngine.sort_mentor_queue`); clients must render it as-is (DM-SS03). The approve path locks the case row `FOR UPDATE` — do not remove it (F-03).
 - `docs/10_TASKS.md` task prompts predate the tech-selection reset — team lead must review before treating them as frozen implementation instructions.
 - `docs/04_ARCHITECTURE.md` is marked `RED DRAFT` but contains many frozen decisions; status should be `UNDER REVIEW` at minimum.

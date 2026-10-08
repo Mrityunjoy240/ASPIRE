@@ -22,7 +22,7 @@ from app.models.tasks import StudentTask
 from app.models.users import User
 from app.models.enums import InterventionCaseStatus
 from app.services.case_service import CaseApprovalError, approve_plan
-from app.engines.priority import PriorityEngine
+from app.engines.priority import PriorityEngine, QueueEntry
 
 
 router = APIRouter(prefix="/api/v1/cases", tags=["Intervention Cases"])
@@ -75,7 +75,8 @@ async def get_mentor_queue(
     cases = result.scalars().all()
     
     # Build queue items with student info and priority
-    queue_items = []
+    queue_entries: list[QueueEntry] = []
+    responses: dict = {}
     priority_engine = PriorityEngine()
     
     for case in cases:
@@ -118,7 +119,14 @@ async def get_mentor_queue(
             delta = datetime.now(timezone.utc) - case.updated_at
             days_since_last_action = delta.days
         
-        queue_items.append(CaseQueueItemResponse(
+        queue_entries.append(QueueEntry(
+            case_id=case.id,
+            urgency_band=case.urgency_band,
+            exam_days_remaining=nearest_exam_days,
+            days_since_last_mentor_action=days_since_last_action,
+            created_at=case.created_at or case.opened_at,
+        ))
+        responses[case.id] = CaseQueueItemResponse(
             case_id=case.id,
             student_id=case.student_id,
             student_name=user.full_name,
@@ -129,17 +137,32 @@ async def get_mentor_queue(
             opened_at=case.opened_at,
             nearest_exam_days=nearest_exam_days,
             days_since_last_action=days_since_last_action,
-        ))
-    
-    # Sort per DM-SS03: Urgency Band → Exam Proximity → Days Since Last Action
-    urgency_rank = {"URGENT": 0, "ATTENTION": 1, "MONITOR": 2}
-    queue_items.sort(key=lambda x: (
-        urgency_rank.get(x.urgency_band, 2),
-        x.nearest_exam_days if x.nearest_exam_days is not None else 999,
-        x.days_since_last_action if x.days_since_last_action is not None else 999,
-    ))
-    
-    return queue_items
+        )
+
+    # Canonical DM-SS03 ordering (03 §6.2 FROZEN): computed here, single source
+    # of truth. Clients render this order as-is and must not re-rank it.
+    ordered = priority_engine.sort_mentor_queue(queue_entries)
+    return [responses[entry.case_id] for entry in ordered]
+
+
+def _case_for_approval_query(case_id: UUID):
+    """Case row locked FOR UPDATE so concurrent approval attempts serialize:
+    only the first transaction can observe PENDING_APPROVAL; a blocked second
+    request re-reads the committed result and receives 409 (03 §10.2 allows a
+    single transition). PostgreSQL row-level lock; no external lock service."""
+    return select(InterventionCase).where(InterventionCase.id == case_id).with_for_update()
+
+
+def _plans_for_case_query(case_id: UUID):
+    """Every plan for the case, history included — never scalar_one_or_none().
+
+    The authoritative pending plan is selected inside the Case Approval
+    Service (ADR-002 §5); ambiguous plan sets are refused, never guessed."""
+    return (
+        select(InterventionPlan)
+        .where(InterventionPlan.case_id == case_id)
+        .order_by(InterventionPlan.created_at.desc())
+    )
 
 
 @router.post(
@@ -149,9 +172,12 @@ async def get_mentor_queue(
     dependencies=[Depends(require_mentor_or_admin)],
     responses={
         status.HTTP_409_CONFLICT: {
-            "description": "Case not in PENDING_APPROVAL (03_SYSTEM_SPEC §10.2)",
+            "description": (
+                "Case not in PENDING_APPROVAL, or multiple plans await a mentor "
+                "decision (03_SYSTEM_SPEC §10.2)"
+            ),
         },
-        status.HTTP_400_BAD_REQUEST: {"description": "No plan exists for this case"},
+        status.HTTP_400_BAD_REQUEST: {"description": "No plan awaiting mentor decision for this case"},
     },
 )
 async def approve_case(
@@ -163,13 +189,11 @@ async def approve_case(
 ):
     """Mentor approves/edits/rejects intervention plan.
 
-    Transition ownership and event emission live in the Case Approval
-    Service (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then
-    INTERVENTION_PLAN_APPROVED for approval decisions.
+    Transition ownership, plan selection and event emission live in the Case
+    Approval Service (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then
+    INTERVENTION_PLAN_APPROVED for approval decisions only.
     """
-    result = await session.execute(
-        select(InterventionCase).where(InterventionCase.id == case_id)
-    )
+    result = await session.execute(_case_for_approval_query(case_id))
     case = result.scalar_one_or_none()
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
@@ -177,30 +201,25 @@ async def approve_case(
     if not (auth.is_admin() or auth.has_role("HOD") or case.mentor_id == auth.user_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not this case's mentor")
 
-    # Get the latest plan for this case
-    result = await session.execute(
-        select(InterventionPlan)
-        .where(InterventionPlan.case_id == case_id)
-        .order_by(InterventionPlan.created_at.desc())
-    )
-    plan = result.scalar_one_or_none()
-    if not plan:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="No plan to approve"
-        )
+    result = await session.execute(_plans_for_case_query(case_id))
+    plans = list(result.scalars().all())
 
     try:
         approval = await approve_plan(
             session,
             case=case,
-            plan=plan,
+            plans=plans,
             decision=request.decision,
             mentor_notes=request.mentor_notes,
             actor_id=auth.user_id,
             event_bus=event_bus,
         )
     except CaseApprovalError as exc:
-        code = status.HTTP_409_CONFLICT if exc.code == "ILLEGAL_TRANSITION" else status.HTTP_400_BAD_REQUEST
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code in ("ILLEGAL_TRANSITION", "AMBIGUOUS_PLAN")
+            else status.HTTP_400_BAD_REQUEST
+        )
         raise HTTPException(status_code=code, detail=exc.detail) from exc
 
     return CaseApproveResponse(
