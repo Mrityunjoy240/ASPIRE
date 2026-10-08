@@ -377,6 +377,39 @@ async def test_f01_plan_state_validation_order_state_first():
     assert exc.value.code == "ILLEGAL_TRANSITION"
 
 
+# ---- F-05: dead plans never authorize an approval ----
+
+@pytest.mark.parametrize("dead_status", ["DECLINED", "SUPERSEDED"])
+async def test_f05_dead_plan_cannot_authorize_approval(dead_status: str):
+    """F-05: a PENDING_APPROVAL case whose only plan is dead history
+    (DECLINED/SUPERSEDED, possible after future replan flows) is refused —
+    a dead plan never becomes the basis of an ACTIVE case."""
+    mentor_id = uuid.uuid4()
+    case = make_case(InterventionCaseStatus.PENDING_APPROVAL, mentor_id)
+    dead = make_plan_with(case, status=dead_status, created_days_ago=9)
+    session = make_session()
+    events: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        events.append(event)
+
+    bus.subscribe(EVENT_INTERVENTION_PLAN_APPROVED, recorder)
+
+    with pytest.raises(CaseApprovalError) as exc:
+        await approve_plan(
+            session, case=case, plans=[dead], decision="APPROVED",
+            mentor_notes=None, actor_id=mentor_id, event_bus=bus,
+        )
+    assert exc.value.code == "NO_PLAN"
+    assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+    assert dead.status == dead_status
+    assert dead.mentor_decision is None
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+    assert events == []
+
+
 # ---- F-02: rejection publishes nothing at all ----
 
 async def test_f02_rejection_never_calls_bus_publish():

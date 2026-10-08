@@ -148,7 +148,7 @@ class CaseQueueItemResponse(BaseModel):
     student_roll: str
     urgency_band: str  # URGENT | ATTENTION | MONITOR
     status: str  # OPEN | IN_REVIEW | PLAN_PROPOSED | ...
-    trigger_events: list[dict]
+    trigger_events: list[str]
     opened_at: datetime
     nearest_exam_days: Optional[int]
     days_since_last_action: Optional[int]

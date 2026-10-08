@@ -283,7 +283,7 @@ student_id       UUID REFERENCES student_profiles(id)
 mentor_id        UUID REFERENCES users(id)
 status           intervention_case_status NOT NULL DEFAULT 'OPEN'
 urgency_band     TEXT NOT NULL               -- URGENT | ATTENTION | MONITOR
-trigger_events   JSONB                       -- Array of event IDs that opened the case
+trigger_events   JSONB                       -- Array of event IDs (strings) that opened the case
 opened_at        TIMESTAMPTZ NOT NULL
 resolved_at      TIMESTAMPTZ
 closed_at        TIMESTAMPTZ

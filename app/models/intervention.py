@@ -18,7 +18,7 @@ class InterventionCase(Base):
     mentor_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     status: Mapped[InterventionCaseStatus] = mapped_column(default=InterventionCaseStatus.OPEN.value, nullable=False)
     urgency_band: Mapped[str] = mapped_column(String, nullable=False)  # URGENT | ATTENTION | MONITOR
-    trigger_events: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    trigger_events: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     opened_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     resolved_at: Mapped[datetime | None]
     closed_at: Mapped[datetime | None]

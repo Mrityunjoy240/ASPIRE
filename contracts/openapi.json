@@ -947,8 +947,7 @@
           },
           "trigger_events": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "type": "string"
             },
             "type": "array",
             "title": "Trigger Events"

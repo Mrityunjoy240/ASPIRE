@@ -117,16 +117,22 @@ Known limitation (accepted): browser→API E2E needs the Supabase local stack (O
 Forensic audit (`audit/vertical_slice_forensic_audit_cb300da.md`, verdict FAIL) found four P1s; all four fixed with regression tests that fail against the old implementations:
 - **F-01 (500 on plan history):** router fetches *all* plans via `_plans_for_case_query` (never `scalar_one_or_none`); Case Approval Service selects the single plan awaiting mentor verdict (`ACCEPTED|CUSTOMIZED` AND `mentor_decision IS NULL`, ADR-002 §5). 0 → `NO_PLAN` 400; >1 → `AMBIGUOUS_PLAN` 409 (§10.2 refuses ambiguity, never picks an arbitrary row). Validation order: decision → state → plan selection (double-approval attempt 2 → 409, not 400).
 - **F-02 (spec contradiction):** `03_SYSTEM_SPEC §8.2` catalog row now states emission happens only after APPROVED/EDITED commits `PENDING_APPROVAL → ACTIVE`; rejection = audit only. ADR-002 Amends line corrected to §8.2.
-- **F-03 (no row lock):** `_case_for_approval_query(...).with_for_update()` is the first execute in approve — PostgreSQL row lock serializes concurrent approvals; blocked second request re-reads committed state → 409. No new infra (no Redis/outbox). True 2-connection race needs Postgres (OQ-A02); covered by FOR UPDATE compile test + sequential double-approval test.
+- **F-03 (no row lock):** `_case_for_approval_query(...).with_for_update()` is the first execute in approve — PostgreSQL row lock serializes concurrent approvals; blocked second request re-reads committed state → 409. No new infra (no Redis/outbox). Covered by FOR UPDATE compile test + sequential double-approval test. **Implementation verified; true concurrent two-connection test pending** (needs real Postgres, OQ-A02) — F-03 must not be represented as fully production-verified until such a test exists.
 - **F-04 (client/server sort divergence):** canonical DM-SS03 order now lives only in `PriorityEngine.sort_mentor_queue(list[QueueEntry])`; router builds entries, sorts, returns that order; queue page no longer re-ranks (renders as-is); `DEMO_ROWS` authored in canonical order. PQ-01…PQ-09 regression fixtures + band/NULL handling tests all pass; proof script shows old sorts fail PQ-03/06/07/08/09.
 - **Gates after remediation:** pytest **69/69** (+23) · typecheck 0 · lint 0 (ESLint) · build ✓ (6 routes) · OpenAPI regenerated + idempotent (409/400 description updates) · ruff per-file counts ≤ baseline (only style-consistent `timezone.utc` additions).
-- Remaining known findings are P2/P3 in the audit file (F-05…F-09, ~23 P3s) — **not fixed yet**, awaiting team-lead prioritization.
+
+**Pre-next-slice P2 gate review (F-05 / F-08 / F-09 / F-03) — DONE, commit `chore(quality): close pre-next-slice P2 gates`.**
+- **F-05 → NON-BLOCKING P2.** Audit of the only implemented transition family (mentor rows, §10.2): validates current case state, plan state (`ACCEPTED|CUSTOMIZED` + `mentor_decision IS NULL`, delivered by F-01), plan identity (queried under the case), actor authority (`require_mentor_or_admin` + explicit mentor/HOD check), and transition legality (whitelisted mapping). Plan *version* column does not exist in migration 009 (schema authority) — none applicable today. All other §10.2 transitions (`OPEN → IN_REVIEW` … `RESOLVED → CLOSED`) have **no implementation yet**; their state/plan/actor validation is acceptance criteria for their own future slices, not pre-work. Remaining F-05 delta (evidence gap closed here, no production code changed): +2 regression tests proving DECLINED/SUPERSEDED-only plans are refused `NO_PLAN` with zero mutation/event (`test_f05_dead_plan_cannot_authorize_approval`). Note: audit suggested 409 for dead plans; existing contract keeps missing/awaiting-plan failures at 400 (`NO_PLAN`) and reserves 409 for state/ambiguity — unchanged, documented.
+- **F-08 → BLOCKER FOR NEXT SLICE, FIXED.** Canonical type determined: **array of event-ID strings** — evidence: migration 009 comment "Array of event IDs", `05 §intervention_cases` "Array of event IDs", engine `TriggerEvent.event_type: str` + `reason_codes: list[str]`, demo rows `string[]`, frontend `string[]`/`getEventLabels(events: string[])`. The outliers were the two backend type hints (`schemas.py` `list[dict]`, model `list[dict[str, Any]]`) — with a real producer (next slice's `create_intervention_case`), string rows would have failed response validation → queue 500, and dict rows would render `[object Object]`. Fixed: both hints → `list[str]`; `05:286` clarified "(strings)"; OpenAPI regenerated (`items: {type: string}`). No event names invented, no event-catalog (§8.2) change — this aligns code with the already-documented contract, not an amendment.
+- **F-09 → IMPLEMENT NOW, DONE.** `.github/workflows/ci.yml` gains a `backend` job (existing `ci` Node job untouched): setup-python 3.11 → `pip install -e ".[dev]"` → `python -m pytest tests/ -q` → `generate_openapi.py` + `git diff --exit-code contracts/openapi.json` (DM-API01 "CI fails on drift"). No secrets: dummy `DATABASE_URL` env (NullPool engine never connects during tests/generation — validated by running the whole suite with `.env` removed). Triggers/jobs otherwise unchanged.
+- **F-03 → IMPLEMENTATION VERIFIED / CONCURRENCY TEST PENDING.** Re-verified all five claims by code reading: lock acquired inside the request transaction (SELECT FOR UPDATE is the first case read, held to service commit); authoritative `intervention_cases` row locked; state re-evaluated on the locked read (READ COMMITTED re-fetch after lock), so the §10.2 check runs on post-lock data; loser blocked → re-reads `ACTIVE` → `ILLEGAL_TRANSITION` → 409 → rollback (no second successful transition; no second audit/event). Real two-connection Postgres test **not run** (no Postgres here) — tracked as OQ-A02 follow-up; wording above is mandatory in all future status reports.
+- **Gate validation:** pytest **71/71** (69 + 2 F-05) in clean env (no `.env`, dummy `DATABASE_URL` — exact CI simulation) and normal env · typecheck 0 · lint 0 · build ✓ · OpenAPI regen idempotent, byte-identical with and without `.env` · ci.yml parses as valid YAML · ruff: no new issues on touched lines.
 
 ---
 
 ## Next Major Task
 
-**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. Also pending: P2/P3 remediation from `audit/vertical_slice_forensic_audit_cb300da.md` (F-05 plan-status validation, F-06 client gating, F-07 test gaps, F-08 `trigger_events` type mismatch, F-09 CI lacks pytest/drift), Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
+**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. P2 gates F-08 (`trigger_events` type) and F-09 (CI pytest + drift) are CLOSED; F-05 remains a NON-BLOCKING P2 (mentor-path validation exists; unimplemented transitions validate within their own slices). Also pending: remaining audit findings (F-06 client gating, F-07 test gaps, ~23 P3s), F-03 two-connection Postgres test (OQ-A02), Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
 
 ---
 
@@ -201,17 +207,17 @@ Before claiming a slice done:
 - [x] Contract-first sequence followed (ADR → catalog → contracts → code)
 - [x] `AI_WORKING_STATE.md` complete and current
 - [x] `git diff` has no accidental files (`.opencode/`, `*.docx` excluded)
-- [x] typecheck / lint / build / pytest 69/69 / openapi drift test all green
-- [x] pushed to origin (this slice branch) — P1 remediation commit pushed
+- [x] typecheck / lint / build / pytest 71/71 / openapi drift check all green
+- [x] pushed to origin (this slice branch) — P1 remediation + P2 gate commits pushed
 
 ---
 
 ## Git State
 
 - **Branch:** `feature/vertical-slice-case-approval` (created from `feature/frontend-ui-core` @ `82a36d8`)
-- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — slice commit `cb300da`, then P1 remediation commit (`fix(core): remediate vertical slice P1 findings`) both pushed on this branch
+- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — commits on this branch: slice `cb300da`, P1 remediation `fix(core): remediate vertical slice P1 findings` (`72c6a85`), P2 gate close `chore(quality): close pre-next-slice P2 gates`
 - **Prior UI batch:** `82a36d8` on `feature/frontend-ui-core` (32 files)
-- **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx`, `audit/` (forensic audit — staged with remediation if lead wants it versioned)
+- **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx` (`audit/` is versioned — committed with the P1 remediation)
 
 ---
 
@@ -221,5 +227,6 @@ Before claiming a slice done:
 - The approve endpoint now enforces `03 §10.2` (409 on illegal transitions) and no longer writes an `APPROVED` plan status (not in 05 §9 / migration 009); the verdict lives in `mentor_decision`.
 - After P1 remediation: plan history is expected on cases — the router passes *all* plans to the service, which selects the awaiting one (`ACCEPTED/CUSTOMIZED` + `mentor_decision IS NULL`). Do not reintroduce `scalar_one_or_none` on plan queries.
 - Queue order is computed server-side only (`PriorityEngine.sort_mentor_queue`); clients must render it as-is (DM-SS03). The approve path locks the case row `FOR UPDATE` — do not remove it (F-03).
+- `intervention_cases.trigger_events` is an **array of event-ID strings** (migration 009 + `05 §intervention_cases` + engine `TriggerEvent.event_type: str`) — backend hints are `list[str]`, frontend `string[]`. Do not reintroduce `list[dict]`; OpenAPI `items` must stay `type: string`.
 - `docs/10_TASKS.md` task prompts predate the tech-selection reset — team lead must review before treating them as frozen implementation instructions.
 - `docs/04_ARCHITECTURE.md` is marked `RED DRAFT` but contains many frozen decisions; status should be `UNDER REVIEW` at minimum.
