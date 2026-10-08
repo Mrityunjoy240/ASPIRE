@@ -15,6 +15,12 @@ export const PROVENANCE_LABELS: Readonly<Record<Provenance, string>> = {
   PROPOSED: "AI suggestion",
 };
 
+/** Task priority levels. */
+export type Priority = "critical" | "high" | "medium" | "low";
+
+/** Task status values. */
+export type TaskStatus = "pending" | "completed" | "snoozed";
+
 /** A display-only helper for non-null strings. Not a rule engine. */
 export function isNonEmpty(value: string): boolean {
   return value.trim().length > 0;

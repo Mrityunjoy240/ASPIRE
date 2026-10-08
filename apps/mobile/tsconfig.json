@@ -21,7 +21,8 @@
         "./app/*"
       ]
     },
-    "allowJs": true
+    "allowJs": true,
+    "isolatedModules": true
   },
   "include": [
     "next-env.d.ts",

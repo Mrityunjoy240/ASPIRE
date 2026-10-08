@@ -1,9 +1,14 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ASPIRE — Web",
-  description: "ASPIRE mentor/admin/faculty workspace (scaffold).",
+  title: "ASPIRE Mentor Dashboard",
+  description: "ASPIRE Mentor/Admin/Faculty Workspace",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -12,8 +17,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="bg-[#F8F8F5] text-[#37352F] antialiased">{children}</body>
+    <html lang="en" className="h-full">
+      <head>
+        <meta name="theme-color" content="#070A10" />
+      </head>
+      <body className="h-full min-h-screen bg-[var(--color-bg-canvas)] text-white antialiased">
+        {children}
+      </body>
     </html>
   );
 }
