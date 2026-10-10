@@ -385,7 +385,7 @@ created_at       TIMESTAMPTZ
 ### `institution_rules`
 ```sql
 id               UUID PRIMARY KEY
-institution_id   UUID REFERENCES institutions(id)
+institution_id   UUID NOT NULL REFERENCES institutions(id)  -- DEC-02: institution-owned, enforced by migration 013
 rule_id          TEXT NOT NULL               -- e.g., 'attendance_threshold'
 scope_level      TEXT NOT NULL               -- INSTITUTION | BATCH | PROGRAMME | SEMESTER
 scope_id         UUID                        -- ID of the scoped entity
@@ -396,6 +396,11 @@ version          INT NOT NULL DEFAULT 1
 status           TEXT DEFAULT 'ACTIVE'
 updated_by       UUID REFERENCES users(id)
 ```
+
+> **DEC-02 (approved):** every rule row belongs to an institution — there are
+> no global / institution-independent rules. Migration 012 originally left
+> `institution_id` nullable; migration 013 enforces `NOT NULL` with a
+> preflight that aborts while any NULL-ownership row exists.
 
 ---
 

@@ -148,11 +148,16 @@ async def get_attendance_what_if(
 
 async def _get_attendance_threshold(session: AsyncSession, student_id: UUID) -> Decimal:
     """Fetch attendance threshold from institution_rules."""
+    from app.models.academic import Batch
     from app.models.rules import InstitutionRule
     from app.models.student import StudentProfile
-    
+
+    # Student -> institution ownership goes through the batch (003: batches
+    # carry institution_id; 004: student_profiles carry batch_id only — the
+    # profile has NO institution_id column).
     result = await session.execute(
-        select(StudentProfile.institution_id, StudentProfile.batch_id)
+        select(Batch.institution_id, Batch.id)
+        .join(StudentProfile, StudentProfile.batch_id == Batch.id)
         .where(StudentProfile.id == student_id)
     )
     row = result.first()

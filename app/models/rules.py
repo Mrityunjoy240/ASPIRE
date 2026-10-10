@@ -14,6 +14,8 @@ class InstitutionRule(Base):
     __tablename__ = "institution_rules"
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
+    # DEC-02 (approved): every rule is institution-owned; NOT NULL enforced by
+    # migration 013 (012 originally omitted it). No global rules.
     institution_id: Mapped[UUID] = mapped_column(ForeignKey("institutions.id", ondelete="RESTRICT"))
     rule_id: Mapped[str] = mapped_column(Text, nullable=False)  # e.g., 'attendance_threshold', 'assessment_scheme'
     scope_level: Mapped[str] = mapped_column(Text, nullable=False)  # INSTITUTION | BATCH | PROGRAMME | SEMESTER
