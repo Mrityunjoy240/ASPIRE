@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -15,13 +16,21 @@ class DataConflict(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True)
     entity_table: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[UUID] = mapped_column(nullable=False)
-    existing_value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    incoming_value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # JSONB per migration 011 (schema authority); none_as_null: Python None
+    # stays SQL NULL — NOT NULL columns reject None instead of storing null.
+    existing_value: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
+    incoming_value: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
     source_a: Mapped[str] = mapped_column(Text, nullable=False)
     source_b: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String, default="OPEN")  # OPEN | RESOLVED | IGNORED
     resolver_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
-    resolution: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    resolution: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     resolved_at: Mapped[datetime | None]
     created_at: Mapped[datetime]
 

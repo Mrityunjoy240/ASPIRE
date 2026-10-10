@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Index, String, Text, text
+from sqlalchemy import ForeignKey, Index, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -22,8 +23,14 @@ class AuditLog(Base):
     action_type: Mapped[str] = mapped_column(Text, nullable=False)
     entity_table: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[UUID] = mapped_column(nullable=False)
-    previous_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    new_state: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # JSONB per migration 007 (schema authority); none_as_null keeps Python
+    # None as SQL NULL so the nullable columns match the migration contract.
+    previous_state: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
+    new_state: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     source_system: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
 

@@ -21,8 +21,9 @@ class InterventionCase(Base):
     urgency_band: Mapped[str] = mapped_column(String, nullable=False)  # URGENT | ATTENTION | MONITOR
     # JSONB per migration 009 (schema authority); sqlite variant serves only
     # the F-01 in-memory real-query test, where JSONB cannot compile DDL.
+    # none_as_null: Python None stays SQL NULL (nullable contract).
     trigger_events: Mapped[list[str] | None] = mapped_column(
-        JSONB().with_variant(JSON, "sqlite"), nullable=True
+        JSONB(none_as_null=True).with_variant(JSON, "sqlite"), nullable=True
     )
     opened_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     resolved_at: Mapped[datetime | None]
@@ -51,7 +52,7 @@ class InterventionPlan(Base):
     status: Mapped[str] = mapped_column(Text, nullable=False)  # PROPOSED | ACCEPTED | CUSTOMIZED | DECLINED | SUPERSEDED
     # JSONB per migration 009 (sqlite variant: see trigger_events note).
     plan_actions: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB().with_variant(JSON, "sqlite"), nullable=False
+        JSONB(none_as_null=True).with_variant(JSON, "sqlite"), nullable=False
     )
     # TEXT[] NOT NULL per migration 009 (the schema authority). The sqlite
     # variant exists only for the in-memory real-query regression tests,
@@ -61,7 +62,7 @@ class InterventionPlan(Base):
     )
     # JSONB per migration 009 (sqlite variant: see trigger_events note).
     evidence: Mapped[dict[str, Any]] = mapped_column(
-        JSONB().with_variant(JSON, "sqlite"), nullable=False
+        JSONB(none_as_null=True).with_variant(JSON, "sqlite"), nullable=False
     )
     student_decision: Mapped[str | None] = mapped_column(Text)  # ACCEPTED | DECLINED | CUSTOMIZED
     student_reason: Mapped[str | None] = mapped_column(Text)

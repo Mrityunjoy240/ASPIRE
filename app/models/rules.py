@@ -3,7 +3,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -17,7 +18,11 @@ class InstitutionRule(Base):
     rule_id: Mapped[str] = mapped_column(Text, nullable=False)  # e.g., 'attendance_threshold', 'assessment_scheme'
     scope_level: Mapped[str] = mapped_column(Text, nullable=False)  # INSTITUTION | BATCH | PROGRAMME | SEMESTER
     scope_id: Mapped[UUID | None] = mapped_column()
-    value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # JSONB per migration 012 (schema authority); none_as_null: a Python None
+    # becomes SQL NULL and is rejected by the NOT NULL contract.
+    value: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
     effective_from: Mapped[datetime] = mapped_column(nullable=False)
     effective_to: Mapped[datetime | None]
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

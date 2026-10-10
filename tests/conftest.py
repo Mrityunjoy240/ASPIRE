@@ -139,6 +139,7 @@ async def pg_seed(pg_engine):
     return SimpleNamespace(
         case_id=case.id,
         plan_id=plan.id,
+        institution_id=inst.id,
         student_user_id=student_user.id,
         student_profile_id=profile.id,
     )
