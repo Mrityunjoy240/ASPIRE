@@ -107,7 +107,7 @@ async def test_data_conflict_values_round_trip(pg_engine, pg_seed):
     resolution starts NULL, then whole-value replacement; empty vs NULL
     distinction for the nullable resolution column."""
     conflict = DataConflict(
-        id=uuid.uuid4(),  # explicit: model has no server_default for id
+        id=uuid.uuid4(),  # explicit id still supported (DEC-03 added server_default)
         entity_table="attendance_records",
         entity_id=uuid.uuid4(),
         existing_value={"attendance_percentage": 72.5, "source_row": 118},
@@ -188,7 +188,7 @@ async def test_institution_rule_value_round_trip(pg_engine, pg_seed):
     """value insert (NOT NULL per 012), read back, whole-value replacement,
     and the attendance-router-shaped select of just InstitutionRule.value."""
     rule = InstitutionRule(
-        id=uuid.uuid4(),  # explicit: model has no server_default for id
+        id=uuid.uuid4(),  # explicit id still supported (DEC-03 added server_default)
         institution_id=pg_seed.institution_id,
         rule_id="attendance_threshold",
         scope_level="INSTITUTION",

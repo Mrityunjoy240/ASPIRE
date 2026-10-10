@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy import ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,7 +13,11 @@ from app.core.database import Base
 class DataConflict(Base):
     __tablename__ = "data_conflicts"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    # DEC-03 (approved): server_default mirrors migration 011
+    # (DEFAULT gen_random_uuid(), per 05 "all tables have" convention) — the
+    # database owns id generation; without it a real-PostgreSQL insert that
+    # omits id fails with "NULL identity key" (same defect audit.py documents).
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     entity_table: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[UUID] = mapped_column(nullable=False)
     # JSONB per migration 011 (schema authority); none_as_null: Python None

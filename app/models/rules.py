@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,7 +13,11 @@ from app.core.database import Base
 class InstitutionRule(Base):
     __tablename__ = "institution_rules"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    # DEC-03 (approved): server_default mirrors migration 012
+    # (DEFAULT gen_random_uuid(), per 05 "all tables have" convention) — same
+    # real-PostgreSQL NULL-identity-key failure as audit.py documents, fixed
+    # the same way.
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     # DEC-02 (approved): every rule is institution-owned; NOT NULL enforced by
     # migration 013 (012 originally omitted it). No global rules.
     institution_id: Mapped[UUID] = mapped_column(ForeignKey("institutions.id", ondelete="RESTRICT"))
