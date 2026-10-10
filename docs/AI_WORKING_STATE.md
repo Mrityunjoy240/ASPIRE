@@ -128,11 +128,25 @@ Forensic audit (`audit/vertical_slice_forensic_audit_cb300da.md`, verdict FAIL) 
 - **F-03 → IMPLEMENTATION VERIFIED / CONCURRENCY TEST PENDING.** Re-verified all five claims by code reading: lock acquired inside the request transaction (SELECT FOR UPDATE is the first case read, held to service commit); authoritative `intervention_cases` row locked; state re-evaluated on the locked read (READ COMMITTED re-fetch after lock), so the §10.2 check runs on post-lock data; loser blocked → re-reads `ACTIVE` → `ILLEGAL_TRANSITION` → 409 → rollback (no second successful transition; no second audit/event). Real two-connection Postgres test **not run** (no Postgres here) — tracked as OQ-A02 follow-up; wording above is mandatory in all future status reports.
 - **Gate validation:** pytest **71/71** (69 + 2 F-05) in clean env (no `.env`, dummy `DATABASE_URL` — exact CI simulation) and normal env · typecheck 0 · lint 0 · build ✓ · OpenAPI regen idempotent, byte-identical with and without `.env` · ci.yml parses as valid YAML · ruff: no new issues on touched lines.
 
+**CI gate verification (F-09 proven live) — DONE, head `5f88157`.** Feature-branch pushes never run CI (triggers are push/pull_request to `[main, master]` only), so runs were driven through draft **PR #1** (`feature/vertical-slice-case-approval` → `master`; exists solely to trigger the workflow — not for review/merge, lead may close it):
+- Run `38029199890` (head `511411a`): **backend FAILED** — clean install resolved `sqlalchemy>=2.0.30` → 2.1.4 where greenlet ships only via `sqlalchemy[asyncio]` (`ModuleNotFoundError`); latent second defect: `tests/test_api_routers.py` used `uuid.UUID` annotation with only `uuid4` imported (NameError on Python 3.11; masked on local 3.14 by PEP 649 deferred annotations). Node `ci` job green.
+- Fix commit `5f88157` (`fix(ci): restore backend CI contract on clean installs`): `sqlalchemy[asyncio]>=2.0.30` in pyproject, `import uuid` in the test, `contracts/openapi.json` regenerated under CI-resolved deps (fastapi 0.143.0 / pydantic 2.14.0 / sqlalchemy 2.1.4 — byte-identical on Python 3.11.15 and 3.14.4).
+- Run `38030328306` (head `5f88157`): **SUCCESS both jobs** — backend `71 passed` + drift clean; Node typecheck/lint/build green. Phase-1 gate satisfied with observed remote evidence.
+
+**Vertical Slice 2 — Student Plan Acceptance (DONE, commit `7e0faf3`, branch `feature/vertical-slice-case-approval`).**
+Team-lead scope decision: **acceptance rows only** — `PLAN_PROPOSED → PENDING_APPROVAL` for `ACCEPTED` and `CUSTOMIZED`. Decline (`→ REPLAN_REQUIRED`, event `PLAN_DECLINED`), agent proposal production (`IN_REVIEW → PLAN_PROPOSED`), Supervisor wiring, journey Step 7 task materialization and UI are deferred to their own slices.
+- **Service:** `app/services/student_action_service.py` — Student Action Service (03 §8.2 catalog producer) is the sole owner of the student transition rows: decision validation (decline arrives as `INVALID_DECISION`) → §10.2 state guard (409) → authoritative plan selection (exactly one `status='PROPOSED' AND student_decision IS NULL`; 0→`NO_PLAN` 400, >1→`AMBIGUOUS_PLAN` 409; decided/dead history never selected) → payload rules (`CUSTOMIZED` requires non-empty `plan_actions`, `ACCEPTED` forbids them — journeys 1.1 Step 6) → plan (`student_decision`/`decided_at`/`status`, `plan_actions` rewrite for CUSTOMIZED) + case mutation → audit row (`PLAN_ACCEPTED`, 07 §4; `source_system='STUDENT_APP'`) → **commit → emit** `PLAN_ACCEPTED` (Minimal Event Contract §8.1).
+- **Endpoint:** `POST /api/v1/cases/{case_id}/student-decision` — `require_roles(STUDENT)`; real own-data check (`StudentProfile.user_id` → `case.student_id`, 403 without existence oracle); case row locked `FOR UPDATE` (shared helper renamed `_case_row_for_update`); concurrent double-POST serializes → one transition/audit/event, loser 409.
+- **Schema:** `StudentDecisionRequest` (Literal `ACCEPTED|CUSTOMIZED` + model-level payload rules → 422) / `StudentDecisionResponse`.
+- **Tests:** +18 service, +14 router → suite **71 → 103**; covers happy/customized, illegal state, invalid & deferred decline, no/dead/ambiguous plans, plan-history selection, state-guard ordering, audit contract, minimal event contract, idempotent re-decision, 401/403/404/400/409/422 matrix, double-POST, FOR UPDATE compile.
+- **Contract:** `contracts/openapi.json` regenerated (12 paths, purely additive, byte-identical on py3.11/py3.14).
+- **CI:** run `38032011350` (head `7e0faf3`) — **SUCCESS both jobs**, backend `103 passed` + drift clean (observed).
+
 ---
 
 ## Next Major Task
 
-**Next vertical slice (awaiting team-lead selection).** Candidates: student plan acceptance (`PLAN_PROPOSED → PENDING_APPROVAL` + student events), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. P2 gates F-08 (`trigger_events` type) and F-09 (CI pytest + drift) are CLOSED; F-05 remains a NON-BLOCKING P2 (mentor-path validation exists; unimplemented transitions validate within their own slices). Also pending: remaining audit findings (F-06 client gating, F-07 test gaps, ~23 P3s), F-03 two-connection Postgres test (OQ-A02), Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
+**Next vertical slice (awaiting team-lead selection).** Candidates: student **decline** row (`PLAN_PROPOSED → REPLAN_REQUIRED` + `PLAN_DECLINED` event, deferred from slice 2), agent proposal production (`IN_REVIEW → PLAN_PROPOSED` / `REPLAN_REQUIRED → PLAN_PROPOSED` creating `PROPOSED` plans — needs Supervisor/LLMService), Supervisor wiring to the in-process event bus, DM-AG03 scheduler emitting time-based events, queue page attendance/CRUD. Closed: F-08 (`trigger_events` type), F-09 (CI pytest + drift — live runs green through `7e0faf3`), slice-2 acceptance path. F-05 remains a NON-BLOCKING P2 (mentor path + student acceptance validated; unimplemented transitions validate within their own slices). Also pending: remaining audit findings (F-06 client gating, F-07 test gaps, ~23 P3s), F-03 two-connection Postgres test (OQ-A02), Stitch screens 17–20 review (only Screen 03 approved) and Constitution sign-offs (FINAL FREEZE not granted).
 
 ---
 
@@ -207,15 +221,17 @@ Before claiming a slice done:
 - [x] Contract-first sequence followed (ADR → catalog → contracts → code)
 - [x] `AI_WORKING_STATE.md` complete and current
 - [x] `git diff` has no accidental files (`.opencode/`, `*.docx` excluded)
-- [x] typecheck / lint / build / pytest 71/71 / openapi drift check all green
-- [x] pushed to origin (this slice branch) — P1 remediation + P2 gate commits pushed
+- [x] typecheck / lint / build / pytest / openapi drift all green **on GitHub Actions** — run `38032011350` (head `7e0faf3`): backend `103 passed` + drift clean, Node job green (observed); prior run `38030328306` (`5f88157`) `71 passed`
+- [x] local pytest 103/103 on Python 3.14.4 **and** the CI-parity Python 3.11.15 venv (CI-resolved dep set); OpenAPI artifact byte-identical across both
+- [x] pushed to origin (this slice branch) — slice `cb300da`, P1 `72c6a85`, P2 `511411a`, CI fix `5f88157`, slice 2 `7e0faf3`
 
 ---
 
 ## Git State
 
 - **Branch:** `feature/vertical-slice-case-approval` (created from `feature/frontend-ui-core` @ `82a36d8`)
-- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — commits on this branch: slice `cb300da`, P1 remediation `fix(core): remediate vertical slice P1 findings` (`72c6a85`), P2 gate close `chore(quality): close pre-next-slice P2 gates`
+- **Remote:** `origin` to `https://github.com/Mrityunjoy240/ASPIRE.git` — commits on this branch: slice `cb300da`, P1 remediation `72c6a85`, P2 gate close `511411a`, CI contract fix `5f88157`, student acceptance slice `7e0faf3`
+- **CI:** workflows trigger only on push/pull_request to `main`/`master`; draft **PR #1** (`→ master`) is the standing `pull_request` trigger for this branch — observe runs under Actions before claiming green
 - **Prior UI batch:** `82a36d8` on `feature/frontend-ui-core` (32 files)
 - **Untracked, kept out of commits:** `.opencode/` (only `config.json` gitignored), `EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx` (`audit/` is versioned — committed with the P1 remediation)
 
@@ -230,3 +246,6 @@ Before claiming a slice done:
 - `intervention_cases.trigger_events` is an **array of event-ID strings** (migration 009 + `05 §intervention_cases` + engine `TriggerEvent.event_type: str`) — backend hints are `list[str]`, frontend `string[]`. Do not reintroduce `list[dict]`; OpenAPI `items` must stay `type: string`.
 - `docs/10_TASKS.md` task prompts predate the tech-selection reset — team lead must review before treating them as frozen implementation instructions.
 - `docs/04_ARCHITECTURE.md` is marked `RED DRAFT` but contains many frozen decisions; status should be `UNDER REVIEW` at minimum.
+- Student acceptance slice scope (team lead, 10 Oct 2026): **acceptance rows only** — decline is refused as `INVALID_DECISION` (service) / 422 (schema Literal) and is a candidate slice, not a bug. Journey Step 7 task materialization from accepted plans is also out of scope (future `PLAN_ACCEPTED` consumer).
+- `audit_log.source_system` for student rows is `STUDENT_APP`; the illustrative value list in `05 §7` and the migration `007_audit_log.sql` comment still read `CSV_IMPORT | MENTOR_WEB | RULE_ENGINE | AGENT` (plain TEXT, no CHECK — no schema change needed). **Doc-comment update pending team lead** — do not silently edit frozen docs.
+- Plan history applies to student decisions too: the service picks the single `PROPOSED` plan and refuses ambiguity — never reintroduce `scalar_one_or_none` on plan queries (same rule as the mentor path).
