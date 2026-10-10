@@ -3,6 +3,7 @@
 # Verifies auth rejection, response schemas for /health, /attendance/what-if, /cases/queue
 
 import pytest
+import uuid
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from uuid import uuid4
