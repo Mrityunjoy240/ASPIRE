@@ -76,3 +76,6 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --tb=short"
+markers = [
+    "integration: needs a disposable PostgreSQL via ASPIRE_TEST_PG_DSN (skipped when unset)",
+]

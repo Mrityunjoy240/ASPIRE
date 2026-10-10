@@ -1,8 +1,9 @@
 # tests/test_student_action_service.py
-# Student Action Service — state machine (03_SYSTEM_SPEC §10.2 student
-# acceptance rows), audit row (07 §4), commit-before-emit ordering and the
-# PLAN_ACCEPTED contract (03 §8.1/§8.2).
+# Student Action Service — state machine (03_SYSTEM_SPEC §10.2 student rows),
+# audit rows (07 §4), commit-before-emit ordering and the PLAN_ACCEPTED /
+# PLAN_DECLINED contracts (03 §8.1/§8.2).
 
+import json
 import uuid
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -15,6 +16,7 @@ from app.models.enums import InterventionCaseStatus
 from app.models.intervention import InterventionCase, InterventionPlan
 from app.services.student_action_service import (
     EVENT_PLAN_ACCEPTED,
+    EVENT_PLAN_DECLINED,
     StudentActionError,
     decide_plan,
 )
@@ -68,6 +70,7 @@ async def run_decision(
     case_status: InterventionCaseStatus = InterventionCaseStatus.PLAN_PROPOSED,
     plans: list[InterventionPlan] | None = None,
     plan_actions: list[dict] | None = None,
+    reason: str | None = None,
     event_bus: EventBus | None = None,
     actor_id: uuid.UUID | None = None,
 ):
@@ -84,6 +87,7 @@ async def run_decision(
         plans=plans,
         decision=decision,
         plan_actions=plan_actions,
+        reason=reason,
         actor_id=actor_id or uuid.uuid4(),
         event_bus=event_bus,
     )
@@ -219,10 +223,9 @@ async def test_illegal_transition_does_not_emit():
     assert events == []
 
 
-@pytest.mark.parametrize("decision", ["DECLINED", "MAYBE"])
+@pytest.mark.parametrize("decision", ["MAYBE", "APPROVED"])
 async def test_invalid_decision_refused(decision: str):
-    """Decline is a deferred slice: it is refused as an unknown decision,
-    never silently honored by this endpoint."""
+    """Unknown decision values are refused, never silently honored."""
     case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
     plans = [make_plan(case)]
     session = make_session()
@@ -462,3 +465,256 @@ async def test_idempotent_second_decision_refused():
     assert session.add.call_count == 1  # single audit row
     assert case.status == InterventionCaseStatus.PENDING_APPROVAL
     assert plans[0].student_decision == "ACCEPTED"
+
+
+# ============ Decline row (PLAN_PROPOSED → REPLAN_REQUIRED) ============
+
+
+async def test_decline_transitions_to_replan_required_and_emits():
+    received: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+    bus.subscribe(EVENT_PLAN_ACCEPTED, recorder)
+
+    original_actions = [{"type": "ATTEND_CLASS", "subject": "DBMS"}]
+    result, case, plans, session, _ = await run_decision(
+        "DECLINED", reason="Morning lab clashes with commute", event_bus=bus
+    )
+
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED  # 03 §10.2
+    assert plans[0].status == "DECLINED"  # 05 §9 status set
+    assert plans[0].student_decision == "DECLINED"
+    assert plans[0].decided_at is not None
+    assert plans[0].student_reason == "Morning lab clashes with commute"
+    assert plans[0].plan_actions == original_actions  # decline never edits actions
+    assert result.case_status == "REPLAN_REQUIRED"
+    assert result.student_decision == "DECLINED"
+    assert result.plan_id == plans[0].id
+
+    session.commit.assert_awaited()  # commit strictly before emit
+    assert [e.event_type for e in received] == [EVENT_PLAN_DECLINED]
+
+
+async def test_decline_without_reason_leaves_reason_none():
+    """Reason is optional (02_USER_JOURNEYS 1.1 Step 6)."""
+    result, case, plans, session, _ = await run_decision("DECLINED")
+
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    assert plans[0].student_reason is None
+    assert plans[0].student_decision == "DECLINED"
+    assert result.student_decision == "DECLINED"
+
+
+async def test_decline_with_actions_refused():
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    plans = [make_plan(case)]
+    session = make_session()
+    events: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        events.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=plans, decision="DECLINED",
+            plan_actions=[{"type": "STUDY_BLOCK"}], reason="x",
+            actor_id=uuid.uuid4(), event_bus=bus,
+        )
+    assert exc.value.code == "INVALID_REQUEST"
+    assert case.status == InterventionCaseStatus.PLAN_PROPOSED
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+    assert events == []
+
+
+async def test_accept_with_reason_refused():
+    """The reason field is decline-only: an acceptance cannot smuggle it."""
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    plans = [make_plan(case)]
+    session = make_session()
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=plans, decision="ACCEPTED",
+            plan_actions=None, reason="no thanks", actor_id=uuid.uuid4(),
+            event_bus=EventBus(),
+        )
+    assert exc.value.code == "INVALID_REQUEST"
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+async def test_decline_invalid_state_refused():
+    case = make_case(InterventionCaseStatus.ACTIVE)
+    plans = [make_plan(case)]
+    session = make_session()
+    events: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        events.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=plans, decision="DECLINED",
+            plan_actions=None, reason=None, actor_id=uuid.uuid4(),
+            event_bus=bus,
+        )
+    assert exc.value.code == "ILLEGAL_TRANSITION"
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+    assert events == []
+
+
+async def test_decline_no_plans_refused():
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    session = make_session()
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=[], decision="DECLINED",
+            plan_actions=None, actor_id=uuid.uuid4(), event_bus=EventBus(),
+        )
+    assert exc.value.code == "NO_PLAN"
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+@pytest.mark.parametrize("dead_status", ["DECLINED", "SUPERSEDED"])
+async def test_decline_dead_plan_never_selected(dead_status: str):
+    """Dead history never becomes the basis of a decline either."""
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    dead = make_plan(case, status=dead_status, created_days_ago=9)
+    session = make_session()
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=[dead], decision="DECLINED",
+            plan_actions=None, actor_id=uuid.uuid4(), event_bus=EventBus(),
+        )
+    assert exc.value.code == "NO_PLAN"
+    assert dead.status == dead_status  # untouched
+    assert dead.student_decision is None  # no mutation on refusal
+    session.commit.assert_not_awaited()
+
+
+async def test_decline_ambiguous_two_proposed_plans_refused():
+    """Two eligible plans → refuse, never pick an arbitrary row (409 path)."""
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    plan_a = make_plan(case, created_days_ago=2)
+    plan_b = make_plan(case, created_days_ago=1)
+    session = make_session()
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=[plan_a, plan_b], decision="DECLINED",
+            plan_actions=None, actor_id=uuid.uuid4(), event_bus=EventBus(),
+        )
+    assert exc.value.code == "AMBIGUOUS_PLAN"
+    assert plan_a.student_decision is None and plan_b.student_decision is None
+    session.commit.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+async def test_decline_audit_row_contract():
+    actor = uuid.uuid4()
+    reason = "Cannot attend morning sessions"
+    _, case, plans, session, _ = await run_decision(
+        "DECLINED", reason=reason, actor_id=actor
+    )
+
+    session.add.assert_called_once()
+    audit = session.add.call_args[0][0]
+    assert isinstance(audit, AuditLog)
+    assert audit.actor_id == actor
+    assert audit.actor_type == "USER"
+    assert audit.action_type == "PLAN_DECLINED"  # 07 §4 mandatory audit event
+    assert audit.entity_table == "intervention_plans"
+    assert audit.entity_id == plans[0].id
+    assert audit.source_system == "STUDENT_APP"
+    assert audit.previous_state["case_status"] == "PLAN_PROPOSED"
+    assert audit.previous_state["plan_status"] == "PROPOSED"
+    assert audit.new_state["case_status"] == "REPLAN_REQUIRED"
+    assert audit.new_state["plan_status"] == "DECLINED"
+    assert audit.new_state["student_decision"] == "DECLINED"
+    # no PII keys and no free-text reason in the UUID-only state JSON (07 §4)
+    states = json.dumps(audit.previous_state) + json.dumps(audit.new_state)
+    assert reason not in states
+    for key in (*audit.previous_state.keys(), *audit.new_state.keys()):
+        assert key not in ("email", "full_name", "name", "roll_number", "reason")
+
+
+async def test_decline_event_matches_minimal_contract():
+    received: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+
+    reason = "Not feasible with my schedule"
+    result, case, plans, session, _ = await run_decision(
+        "DECLINED", reason=reason, event_bus=bus
+    )
+
+    assert len(received) == 1
+    event = received[0]
+    data = event.to_dict()
+    assert set(data.keys()) == {
+        "event_id", "event_type", "student_id", "source_id",
+        "occurred_at", "data_version", "payload",
+    }
+    assert event.event_type == "PLAN_DECLINED"
+    assert event.student_id == case.student_id
+    assert event.source_id == plans[0].id
+    assert event.payload == {
+        "case_id": str(case.id),
+        "plan_id": str(plans[0].id),
+        "decision": "DECLINED",
+        "previous_status": "PLAN_PROPOSED",
+        "new_status": "REPLAN_REQUIRED",
+    }
+    # reason stays on the plan row: minimal contract carries no free text
+    assert reason not in json.dumps(event.payload)
+
+
+async def test_decline_second_decision_refused():
+    """After a decline the case is REPLAN_REQUIRED: a re-submission is
+    ILLEGAL_TRANSITION with no duplicate audit row or event."""
+    received: list[DomainEvent] = []
+    bus = EventBus()
+
+    async def recorder(event: DomainEvent):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+
+    case = make_case(InterventionCaseStatus.PLAN_PROPOSED)
+    plans = [make_plan(case)]
+    session = make_session()
+
+    await decide_plan(
+        session, case=case, plans=plans, decision="DECLINED",
+        plan_actions=None, reason="x", actor_id=uuid.uuid4(), event_bus=bus,
+    )
+
+    with pytest.raises(StudentActionError) as exc:
+        await decide_plan(
+            session, case=case, plans=plans, decision="DECLINED",
+            plan_actions=None, reason="x", actor_id=uuid.uuid4(), event_bus=bus,
+        )
+    assert exc.value.code == "ILLEGAL_TRANSITION"
+    assert len(received) == 1
+    assert session.add.call_count == 1  # single audit row
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    assert plans[0].student_decision == "DECLINED"

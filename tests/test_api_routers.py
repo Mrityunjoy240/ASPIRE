@@ -760,6 +760,98 @@ def test_student_decision_customized_persists_actions(student_deps, client, mock
     assert [e.event_type for e in received] == [EVENT_PLAN_ACCEPTED]
 
 
+def test_student_decision_declined_persists_reason(student_deps, client, mock_student_auth):
+    """200: DECLINED → REPLAN_REQUIRED with optional reason persisted,
+    audit row PLAN_DECLINED, PLAN_DECLINED emitted post-commit
+    (03 §10.2 decline row, §8.2; 07 §4)."""
+    from app.main import app as main_app
+    from app.services.student_action_service import EVENT_PLAN_ACCEPTED, EVENT_PLAN_DECLINED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+    bus.subscribe(EVENT_PLAN_ACCEPTED, recorder)
+    try:
+        response = client.post(
+            f"/api/v1/cases/{case_id}/student-decision",
+            json={"decision": "DECLINED", "reason": "Morning batch clashes with my commute"},
+        )
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"case_id", "student_decision", "decided_at"}
+    assert data["student_decision"] == "DECLINED"
+
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    assert plan.status == "DECLINED"
+    assert plan.student_decision == "DECLINED"
+    assert plan.student_reason == "Morning batch clashes with my commute"
+    assert plan.decided_at is not None
+    session.add.assert_called_once()
+    session.commit.assert_awaited()
+    audit = session.add.call_args[0][0]
+    assert audit.action_type == "PLAN_DECLINED"
+    assert audit.source_system == "STUDENT_APP"
+    assert audit.entity_id == plan.id
+    assert "Morning batch" not in str(audit.new_state)  # no free text (07 §4)
+
+    assert [e.event_type for e in received] == [EVENT_PLAN_DECLINED]
+    assert received[0].payload["new_status"] == "REPLAN_REQUIRED"
+    assert received[0].payload["decision"] == "DECLINED"
+
+
+def test_student_decision_declined_without_reason(student_deps, client, mock_student_auth):
+    """Reason is optional (02_USER_JOURNEYS 1.1 Step 6: 'optionally')."""
+    from app.main import app as main_app
+    from app.services.student_action_service import EVENT_PLAN_DECLINED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_DECLINED, recorder)
+    try:
+        response = client.post(
+            f"/api/v1/cases/{case_id}/student-decision", json={"decision": "DECLINED"}
+        )
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    assert response.json()["student_decision"] == "DECLINED"
+    assert plan.student_reason is None
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    assert [e.event_type for e in received] == [EVENT_PLAN_DECLINED]
+
+
 def test_student_decision_404_unknown_case(student_deps, client, mock_student_auth):
     session = AsyncMock()
     session.execute = _result_returning(None)
@@ -800,6 +892,43 @@ def test_student_decision_403_not_own_case(student_deps, client, mock_student_au
         f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
     )
     assert response.status_code == 403
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+    assert case.status == InterventionCaseStatus.PLAN_PROPOSED
+
+
+def test_student_decision_decline_409_illegal_transition(student_deps, client, mock_student_auth):
+    """Decline follows the same §10.2 state guard: only from PLAN_PROPOSED."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.REPLAN_REQUIRED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "DECLINED"}
+    )
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_student_decision_decline_400_no_plan(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    session.execute = _result_returning(case, profile, [])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "DECLINED"}
+    )
+    assert response.status_code == 400
     session.add.assert_not_called()
     session.commit.assert_not_awaited()
     assert case.status == InterventionCaseStatus.PLAN_PROPOSED
@@ -861,14 +990,35 @@ def test_student_decision_409_ambiguous_plans(student_deps, client, mock_student
     session.commit.assert_not_awaited()
 
 
-def test_student_decision_422_decline_is_deferred(student_deps, client, mock_student_auth):
-    """Decline (→ REPLAN_REQUIRED) is a deferred slice: 422 at the contract
-    boundary, never a silent half-transition."""
+def test_student_decision_422_decline_with_actions(student_deps, client, mock_student_auth):
+    """A decline carries an optional reason, never edited actions (02 1.1 Step 6)."""
     session = AsyncMock()
     _override_auth_and_session(student_deps, mock_student_auth, session)
 
     response = client.post(
-        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "DECLINED"}
+        f"/api/v1/cases/{uuid4()}/student-decision",
+        json={"decision": "DECLINED", "plan_actions": [{"type": "STUDY_BLOCK"}]},
+    )
+    assert response.status_code == 422
+
+
+def test_student_decision_422_reason_only_on_decline(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision",
+        json={"decision": "ACCEPTED", "reason": "courtesy note"},
+    )
+    assert response.status_code == 422
+
+
+def test_student_decision_422_unknown_decision(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "MAYBE"}
     )
     assert response.status_code == 422
 

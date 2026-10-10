@@ -240,7 +240,7 @@ entity_table     TEXT NOT NULL               -- e.g., 'attendance_records'
 entity_id        UUID NOT NULL
 previous_state   JSONB
 new_state        JSONB
-source_system    TEXT NOT NULL               -- CSV_IMPORT | MENTOR_WEB | RULE_ENGINE | AGENT
+source_system    TEXT NOT NULL               -- CSV_IMPORT | MENTOR_WEB | RULE_ENGINE | AGENT | STUDENT_APP
 created_at       TIMESTAMPTZ NOT NULL
 ```
 

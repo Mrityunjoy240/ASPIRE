@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,7 +12,11 @@ from app.core.database import Base
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    # server_default mirrors migration 007 (DEFAULT gen_random_uuid()): the
+    # column is omitted from INSERTs and RETURNING restores the identity —
+    # without it a real-PostgreSQL flush fails with "NULL identity key"
+    # (first surfaced by the genuine two-connection concurrency test).
+    id: Mapped[UUID] = mapped_column(primary_key=True, server_default=text("gen_random_uuid()"))
     actor_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     actor_type: Mapped[str] = mapped_column(String, nullable=False)  # USER | SYSTEM_AGENT
     action_type: Mapped[str] = mapped_column(Text, nullable=False)

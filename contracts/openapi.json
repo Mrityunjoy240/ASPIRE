@@ -561,8 +561,8 @@
         "tags": [
           "Intervention Cases"
         ],
-        "summary": "Student accepts or customizes the proposed plan",
-        "description": "Student accepts or customizes the agent-proposed intervention plan.\n\nTransition ownership, plan selection, audit row and PLAN_ACCEPTED emission\nlive in the Student Action Service (03_SYSTEM_SPEC §10.2, §8.2). Scope:\nacceptance rows only — decline is a deferred slice.",
+        "summary": "Student accepts, customizes or declines the proposed plan",
+        "description": "Student accepts, customizes or declines the agent-proposed plan.\n\nTransition ownership, plan selection, audit row and PLAN_ACCEPTED /\nPLAN_DECLINED emission live in the Student Action Service\n(03_SYSTEM_SPEC §10.2, §8.2). Decline reason is optional\n(02_USER_JOURNEYS 1.1 Step 6).",
         "operationId": "student_plan_decision_api_v1_cases__case_id__student_decision_post",
         "security": [
           {
@@ -1072,7 +1072,8 @@
             "type": "string",
             "enum": [
               "ACCEPTED",
-              "CUSTOMIZED"
+              "CUSTOMIZED",
+              "DECLINED"
             ],
             "title": "Decision"
           },
@@ -1090,6 +1091,17 @@
               }
             ],
             "title": "Plan Actions"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "type": "object",
@@ -1097,7 +1109,7 @@
           "decision"
         ],
         "title": "StudentDecisionRequest",
-        "description": "Student plan decision (03_SYSTEM_SPEC §10.2 student acceptance rows).\n\nScope: ACCEPTANCE only — ACCEPTED and CUSTOMIZED both move the case\nPLAN_PROPOSED → PENDING_APPROVAL (event PLAN_ACCEPTED). Decline\n(→ REPLAN_REQUIRED) is a deferred slice: its value is absent from the\nLiteral, so clients receive 422 instead of a silent half-transition."
+        "description": "Student plan decision (03_SYSTEM_SPEC §10.2 student rows).\n\nACCEPTED / CUSTOMIZED move the case PLAN_PROPOSED → PENDING_APPROVAL\n(event PLAN_ACCEPTED); DECLINED moves it PLAN_PROPOSED → REPLAN_REQUIRED\n(event PLAN_DECLINED). The decline reason is optional (02_USER_JOURNEYS\n1.1 Step 6; 05 §9 `student_reason`) and may only accompany DECLINED."
       },
       "StudentDecisionResponse": {
         "properties": {

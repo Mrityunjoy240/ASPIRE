@@ -166,15 +166,16 @@ class CaseApproveResponse(BaseModel):
 
 
 class StudentDecisionRequest(BaseModel):
-    """Student plan decision (03_SYSTEM_SPEC §10.2 student acceptance rows).
+    """Student plan decision (03_SYSTEM_SPEC §10.2 student rows).
 
-    Scope: ACCEPTANCE only — ACCEPTED and CUSTOMIZED both move the case
-    PLAN_PROPOSED → PENDING_APPROVAL (event PLAN_ACCEPTED). Decline
-    (→ REPLAN_REQUIRED) is a deferred slice: its value is absent from the
-    Literal, so clients receive 422 instead of a silent half-transition.
+    ACCEPTED / CUSTOMIZED move the case PLAN_PROPOSED → PENDING_APPROVAL
+    (event PLAN_ACCEPTED); DECLINED moves it PLAN_PROPOSED → REPLAN_REQUIRED
+    (event PLAN_DECLINED). The decline reason is optional (02_USER_JOURNEYS
+    1.1 Step 6; 05 §9 `student_reason`) and may only accompany DECLINED.
     """
-    decision: Literal["ACCEPTED", "CUSTOMIZED"]
+    decision: Literal["ACCEPTED", "CUSTOMIZED", "DECLINED"]
     plan_actions: list[dict] | None = None
+    reason: str | None = None
 
     @model_validator(mode="after")
     def _check_plan_actions(self) -> "StudentDecisionRequest":
@@ -183,9 +184,13 @@ class StudentDecisionRequest(BaseModel):
             raise ValueError(
                 "plan_actions is required and must be non-empty for a CUSTOMIZED decision"
             )
-        if self.decision == "ACCEPTED" and self.plan_actions is not None:
+        if self.decision != "CUSTOMIZED" and self.plan_actions is not None:
             raise ValueError(
                 "plan_actions may only accompany a CUSTOMIZED decision"
+            )
+        if self.decision != "DECLINED" and self.reason is not None:
+            raise ValueError(
+                "reason may only accompany a DECLINED decision"
             )
         return self
 

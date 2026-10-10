@@ -241,7 +241,7 @@ async def approve_case(
 @router.post(
     "/{case_id}/student-decision",
     response_model=StudentDecisionResponse,
-    summary="Student accepts or customizes the proposed plan",
+    summary="Student accepts, customizes or declines the proposed plan",
     dependencies=[Depends(require_roles(UserRole.STUDENT))],
     responses={
         status.HTTP_409_CONFLICT: {
@@ -265,11 +265,12 @@ async def student_plan_decision(
     session = Depends(get_session),
     event_bus: EventBus = Depends(get_event_bus),
 ):
-    """Student accepts or customizes the agent-proposed intervention plan.
+    """Student accepts, customizes or declines the agent-proposed plan.
 
-    Transition ownership, plan selection, audit row and PLAN_ACCEPTED emission
-    live in the Student Action Service (03_SYSTEM_SPEC §10.2, §8.2). Scope:
-    acceptance rows only — decline is a deferred slice.
+    Transition ownership, plan selection, audit row and PLAN_ACCEPTED /
+    PLAN_DECLINED emission live in the Student Action Service
+    (03_SYSTEM_SPEC §10.2, §8.2). Decline reason is optional
+    (02_USER_JOURNEYS 1.1 Step 6).
     """
     result = await session.execute(_case_row_for_update(case_id))
     case = result.scalar_one_or_none()
@@ -296,6 +297,7 @@ async def student_plan_decision(
             plans=plans,
             decision=request.decision,
             plan_actions=request.plan_actions,
+            reason=request.reason,
             actor_id=auth.user_id,
             event_bus=event_bus,
         )
