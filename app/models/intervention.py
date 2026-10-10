@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -45,7 +46,12 @@ class InterventionPlan(Base):
     created_by: Mapped[str] = mapped_column(Text, nullable=False)  # 'SYSTEM_AGENT' or user UUID
     status: Mapped[str] = mapped_column(Text, nullable=False)  # PROPOSED | ACCEPTED | CUSTOMIZED | DECLINED | SUPERSEDED
     plan_actions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
-    reason_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    # TEXT[] NOT NULL per migration 009 (the schema authority). The sqlite
+    # variant exists only for the in-memory real-query regression tests,
+    # where a PostgreSQL ARRAY type cannot compile DDL.
+    reason_codes: Mapped[list[str]] = mapped_column(
+        ARRAY(Text).with_variant(JSON, "sqlite"), nullable=False
+    )
     evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     student_decision: Mapped[str | None] = mapped_column(Text)  # ACCEPTED | DECLINED | CUSTOMIZED
     student_reason: Mapped[str | None] = mapped_column(Text)
