@@ -42,7 +42,7 @@ def make_plan(case: InterventionCase) -> InterventionPlan:
         status="ACCEPTED",
         plan_actions=[{"type": "MENTOR_CHECKIN"}],
         reason_codes=["ATTENDANCE_RISK"],
-        evidence={},
+        evidence=[],
         created_at=now,
         updated_at=now,
     )
@@ -102,7 +102,7 @@ def make_plan_with(
         status=status,
         plan_actions=[{"type": "MENTOR_CHECKIN"}],
         reason_codes=["ATTENDANCE_RISK"],
-        evidence={},
+        evidence=[],
         mentor_decision=mentor_decision,
         created_at=now,
         updated_at=now,

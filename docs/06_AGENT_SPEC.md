@@ -156,6 +156,8 @@ The routing table is the only source of routing logic. The Supervisor does not u
 
 > **Note on `required_to_recover: 3`:** This is the engine-computed value for 22 attended / 30 conducted at 75% threshold. Verify: (22+3)/(30+3) = 36/48 = 75.00%.
 
+> **Note on persistence (DEC-01, approved):** The `evidence` object above is the agent-layer **fact bundle** — it is never persisted verbatim. Before a plan row is written, evidence is converted to the canonical structured entry array `{id, label, value, source, timestamp}` defined in `05_DATA_API_CONTRACTS.md` ("Evidence entry contract"), with `source`/`timestamp` taken from backend provenance only (`app/services/evidence.py`). The Supervisor (`evidence: {}` above) and intervention follow-up (`evidence: {}` in §5) envelopes are routing/evaluation outputs and are not plan rows at all.
+
 ---
 
 ## 3. Learning Agent

@@ -300,7 +300,7 @@ created_by       TEXT NOT NULL               -- 'SYSTEM_AGENT' or user UUID
 status           TEXT NOT NULL               -- PROPOSED | ACCEPTED | CUSTOMIZED | DECLINED | SUPERSEDED
 plan_actions     JSONB NOT NULL              -- Structured action array
 reason_codes     TEXT[] NOT NULL
-evidence         JSONB NOT NULL
+evidence         JSONB NOT NULL              -- Array of structured evidence entries (contract below)
 student_decision TEXT                        -- ACCEPTED | DECLINED | CUSTOMIZED
 student_reason   TEXT                        -- Optional decline reason
 decided_at       TIMESTAMPTZ
@@ -308,6 +308,28 @@ mentor_decision  TEXT                        -- APPROVED | EDITED | REJECTED
 mentor_notes     TEXT
 mentor_acted_at  TIMESTAMPTZ
 ```
+
+**Evidence entry contract (DEC-01, approved).** `evidence` persists as a JSON
+**array** of entry objects (empty array `[]` = no evidence yet). Each entry has
+exactly these fields:
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | string (UUID) | Stable entry identity for `evidenceRefs`; generated with the project's UUID convention (uuid4 at build time). Unique within one `evidence` array. |
+| `label` | string | Non-empty human-readable caption. |
+| `value` | string \| number \| boolean | Typed scalar. Backend-typed facts keep their original type (numbers are not stringified). Objects/arrays/`null`/NaN are rejected. |
+| `source` | string | **Verified provenance only** — a backend source or approved source metadata. Never produced by the LLM, never defaulted. |
+| `timestamp` | string (ISO-8601, UTC offset) | **Provenance time of the observed fact**, timezone-aware. Never clocked at write time, never from model output. |
+
+Conversion rule: the LLM/agent layer parses `evidence` as `string[]`
+(CONSTITUTION A-05, `10_TASKS` supervisor step 4). Before persistence that
+array passes through the conversion boundary in `app/services/evidence.py`
+(`convert_llm_evidence`), which requires backend-supplied
+`EvidenceProvenance(source, timestamp)` and refuses (raises) when provenance
+is missing or an item is unsupported — provenance-free input never produces an
+entry, so no metadata can be fabricated. Producers holding typed backend facts
+use `build_evidence_entry` so value types survive. Versioning of this contract
+is deferred (DEC-01).
 
 ---
 

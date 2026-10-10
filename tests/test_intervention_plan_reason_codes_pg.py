@@ -45,7 +45,7 @@ async def test_reason_codes_insert_read_update_round_trip(pg_engine, pg_seed):
         status="PROPOSED",
         plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS"}],
         reason_codes=original,
-        evidence={},
+        evidence=[],
         created_at=now, updated_at=now,
     )
     async with AsyncSession(pg_engine, expire_on_commit=False) as session:
@@ -85,7 +85,7 @@ async def test_reason_codes_empty_array_is_not_null_and_null_is_refused(
         status="SUPERSEDED",
         plan_actions=[],
         reason_codes=[],
-        evidence={},
+        evidence=[],
         created_at=now, updated_at=now,
     )
     async with AsyncSession(pg_engine, expire_on_commit=False) as session:
@@ -112,7 +112,7 @@ async def test_reason_codes_empty_array_is_not_null_and_null_is_refused(
         status="SUPERSEDED",
         plan_actions=[],
         reason_codes=None,  # violates migration 009 NOT NULL
-        evidence={},
+        evidence=[],
         created_at=now, updated_at=now,
     )
     async with AsyncSession(pg_engine, expire_on_commit=False) as session:

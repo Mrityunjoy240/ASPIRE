@@ -51,7 +51,7 @@ def make_plan(
         status=status,
         plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS"}],
         reason_codes=["LOW_ATTENDANCE"],
-        evidence={},
+        evidence=[],
         student_decision=student_decision,
         created_at=now,
         updated_at=now,

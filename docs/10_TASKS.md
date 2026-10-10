@@ -1536,7 +1536,7 @@ The supervisor agent does the following when triggered by a risk event:
    {
      decision: string,
      reason_codes: string[],    // e.g. ["LOW_ATTENDANCE", "EXAM_APPROACHING"]
-     evidence: string[],        // e.g. ["attendance 73%", "threshold 75%", "exam in 8 days"]
+     evidence: string[],        // e.g. ["attendance 73%", "threshold 75%", "exam in 8 days"] — LLM parse format only; persisted as canonical evidence entries (05_DATA_API_CONTRACTS, DEC-01)
      actions: [
        { type: string, subject?: string, target_classes?: number, topic?: string, duration_min?: number, source?: string }
      ],

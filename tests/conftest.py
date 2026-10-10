@@ -125,7 +125,7 @@ async def pg_seed(pg_engine):
         status="PROPOSED",
         plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS"}],
         reason_codes=["LOW_ATTENDANCE"],
-        evidence={},
+        evidence=[],
         created_at=now, updated_at=now,
     )
     async with AsyncSession(pg_engine, expire_on_commit=False) as session:

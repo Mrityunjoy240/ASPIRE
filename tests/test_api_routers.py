@@ -245,7 +245,7 @@ def _case_and_plan(case_id: uuid.UUID, mentor_id: uuid.UUID, status):
         status="ACCEPTED",
         plan_actions=[],
         reason_codes=[],
-        evidence={},
+        evidence=[],
         created_at=now,
         updated_at=now,
     )
@@ -418,7 +418,7 @@ def _plan(case_id, *, status="ACCEPTED", mentor_decision=None, days_ago=0):
         status=status,
         plan_actions=[],
         reason_codes=[],
-        evidence={},
+        evidence=[],
         mentor_decision=mentor_decision,
         created_at=now,
         updated_at=now,
@@ -640,7 +640,7 @@ def _proposed_plan(case_id: uuid.UUID, days_ago: int = 0) -> InterventionPlan:
         status="PROPOSED",
         plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS"}],
         reason_codes=["LOW_ATTENDANCE"],
-        evidence={},
+        evidence=[],
         created_at=now,
         updated_at=now,
     )

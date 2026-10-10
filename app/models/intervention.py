@@ -61,7 +61,10 @@ class InterventionPlan(Base):
         ARRAY(Text).with_variant(JSON, "sqlite"), nullable=False
     )
     # JSONB per migration 009 (sqlite variant: see trigger_events note).
-    evidence: Mapped[dict[str, Any]] = mapped_column(
+    # DEC-01: canonical shape is an ARRAY of structured evidence entries
+    # {id, label, value, source, timestamp} — validated by
+    # app.services.evidence (schema documented in 05_DATA_API_CONTRACTS).
+    evidence: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB(none_as_null=True).with_variant(JSON, "sqlite"), nullable=False
     )
     student_decision: Mapped[str | None] = mapped_column(Text)  # ACCEPTED | DECLINED | CUSTOMIZED

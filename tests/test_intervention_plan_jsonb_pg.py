@@ -15,6 +15,12 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.intervention import InterventionCase, InterventionPlan
+from app.services.evidence import (
+    EvidenceProvenance,
+    build_evidence_entry,
+    convert_llm_evidence,
+    validate_evidence_entries,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -39,23 +45,29 @@ async def _read_case(engine, case_id) -> InterventionCase:
 
 async def test_plan_actions_and_evidence_round_trip(pg_engine, pg_seed):
     """Insert (via the ORM seed) -> separate-session read-back -> replace the
-    whole JSON values -> fresh-session read. Nested structures must survive
-    without silent reshaping (engine-realistic action shapes, nested dict and
-    list evidence)."""
+    whole JSON values -> fresh-session read. Nested action structures must
+    survive without silent reshaping, and evidence must retain the DEC-01
+    canonical entry shape (including typed values and provenance timestamps)
+    across the JSONB round trip."""
     original_actions = [{"type": "ATTEND_CLASS", "subject": "DBMS"}]
     row = await _read_plan(pg_engine, pg_seed.plan_id)
     assert row.plan_actions == original_actions
-    assert row.evidence == {}
+    assert row.evidence == []  # canonical shape: array, empty = no evidence yet
 
     new_actions = [
         {"type": "ATTEND_CLASS", "subject": "DBMS", "target_classes": 4},
         {"type": "STUDY_BLOCK", "topic": "Weak areas in DBMS", "duration_min": 60},
     ]
-    new_evidence = {
-        "attendance": 72.5,
-        "thresholds": {"required": 80, "recover_in": 3},
-        "notes": ["Attendance: 72.5%", "Threshold: 76%"],
-    }
+    prov = EvidenceProvenance(
+        source="attendance_derived_state",
+        timestamp=datetime(2026, 10, 7, 8, 0, tzinfo=UTC),
+    )
+    new_evidence = [
+        build_evidence_entry("Attendance", 72.5, provenance=prov),  # float stays float
+        build_evidence_entry("Required to recover", 3, provenance=prov),  # int stays int
+        build_evidence_entry("Critical band", True, provenance=prov),  # bool stays bool
+        *convert_llm_evidence(["Threshold: 75%"], provenance=prov),
+    ]
     async with AsyncSession(pg_engine, expire_on_commit=False) as session:
         row = (
             await session.execute(
@@ -73,9 +85,20 @@ async def test_plan_actions_and_evidence_round_trip(pg_engine, pg_seed):
     assert row.plan_actions == new_actions
     assert row.evidence == new_evidence
     # shape preserved, not silently reshaped
-    assert row.evidence["thresholds"] == {"required": 80, "recover_in": 3}
-    assert row.evidence["notes"][0] == "Attendance: 72.5%"
     assert row.plan_actions[1]["type"] == "STUDY_BLOCK"
+    assert row.evidence[0]["value"] == 72.5
+    assert isinstance(row.evidence[0]["value"], float)  # typed value preserved
+    assert row.evidence[1]["value"] == 3
+    assert isinstance(row.evidence[1]["value"], int)
+    assert row.evidence[2]["value"] is True
+    assert row.evidence[0]["source"] == "attendance_derived_state"
+    assert row.evidence[0]["timestamp"].startswith("2026-10-07T08:00:00")
+    assert row.evidence[3]["label"] == "Threshold"
+    assert row.evidence[3]["value"] == "75%"
+    # the persisted array still validates against the canonical contract
+    entries = validate_evidence_entries(row.evidence)
+    assert len(entries) == 4
+    assert {e.label for e in entries} >= {"Attendance", "Threshold"}
 
 
 async def test_trigger_events_round_trip_null_vs_empty(pg_engine, pg_seed):
