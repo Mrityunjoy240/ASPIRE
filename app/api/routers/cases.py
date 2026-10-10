@@ -12,16 +12,24 @@ from app.api.deps import (
     get_auth_context,
     get_event_bus,
     require_mentor_or_admin,
+    require_roles,
     get_session,
 )
-from app.api.schemas import CaseQueueItemResponse, CaseApproveRequest, CaseApproveResponse
+from app.api.schemas import (
+    CaseQueueItemResponse,
+    CaseApproveRequest,
+    CaseApproveResponse,
+    StudentDecisionRequest,
+    StudentDecisionResponse,
+)
 from app.core.events import EventBus
 from app.models.intervention import InterventionCase, InterventionPlan
 from app.models.student import StudentProfile
 from app.models.tasks import StudentTask
 from app.models.users import User
-from app.models.enums import InterventionCaseStatus
+from app.models.enums import InterventionCaseStatus, UserRole
 from app.services.case_service import CaseApprovalError, approve_plan
+from app.services.student_action_service import StudentActionError, decide_plan
 from app.engines.priority import PriorityEngine, QueueEntry
 
 
@@ -145,11 +153,12 @@ async def get_mentor_queue(
     return [responses[entry.case_id] for entry in ordered]
 
 
-def _case_for_approval_query(case_id: UUID):
-    """Case row locked FOR UPDATE so concurrent approval attempts serialize:
-    only the first transaction can observe PENDING_APPROVAL; a blocked second
-    request re-reads the committed result and receives 409 (03 §10.2 allows a
-    single transition). PostgreSQL row-level lock; no external lock service."""
+def _case_row_for_update(case_id: UUID):
+    """Case row locked FOR UPDATE so concurrent case-state transitions
+    (student decision, mentor approval) serialize: only the first transaction
+    can observe the current state; a blocked second request re-reads the
+    committed result and receives 409 (03 §10.2 allows a single transition
+    per state). PostgreSQL row-level lock; no external lock service."""
     return select(InterventionCase).where(InterventionCase.id == case_id).with_for_update()
 
 
@@ -193,7 +202,7 @@ async def approve_case(
     Approval Service (03_SYSTEM_SPEC §10.2, ADR-002): audit row + commit, then
     INTERVENTION_PLAN_APPROVED for approval decisions only.
     """
-    result = await session.execute(_case_for_approval_query(case_id))
+    result = await session.execute(_case_row_for_update(case_id))
     case = result.scalar_one_or_none()
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
@@ -226,6 +235,84 @@ async def approve_case(
         case_id=approval.case_id,
         mentor_decision=approval.decision,
         acted_at=approval.acted_at,
+    )
+
+
+@router.post(
+    "/{case_id}/student-decision",
+    response_model=StudentDecisionResponse,
+    summary="Student accepts or customizes the proposed plan",
+    dependencies=[Depends(require_roles(UserRole.STUDENT))],
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Case not in PLAN_PROPOSED, or multiple proposed plans await "
+                "a student decision (03_SYSTEM_SPEC §10.2)"
+            ),
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "No proposed plan awaiting a student decision for this case",
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "description": "Case does not belong to the authenticated student",
+        },
+    },
+)
+async def student_plan_decision(
+    case_id: UUID,
+    request: StudentDecisionRequest,
+    auth = Depends(get_auth_context),
+    session = Depends(get_session),
+    event_bus: EventBus = Depends(get_event_bus),
+):
+    """Student accepts or customizes the agent-proposed intervention plan.
+
+    Transition ownership, plan selection, audit row and PLAN_ACCEPTED emission
+    live in the Student Action Service (03_SYSTEM_SPEC §10.2, §8.2). Scope:
+    acceptance rows only — decline is a deferred slice.
+    """
+    result = await session.execute(_case_row_for_update(case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    # Student (own data only — 03 §12, Constitution S-02): the profile behind
+    # this user must own the case. A missing profile and a foreign case are
+    # both 403 without distinguishing detail (no existence oracle).
+    result = await session.execute(
+        select(StudentProfile).where(StudentProfile.user_id == auth.user_id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile or profile.id != case.student_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not this case's student")
+
+    result = await session.execute(_plans_for_case_query(case_id))
+    plans = list(result.scalars().all())
+
+    try:
+        decision = await decide_plan(
+            session,
+            case=case,
+            plans=plans,
+            decision=request.decision,
+            plan_actions=request.plan_actions,
+            actor_id=auth.user_id,
+            event_bus=event_bus,
+        )
+    except StudentActionError as exc:
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code in ("ILLEGAL_TRANSITION", "AMBIGUOUS_PLAN")
+            else status.HTTP_422_UNPROCESSABLE_CONTENT
+            if exc.code == "INVALID_REQUEST"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
+
+    return StudentDecisionResponse(
+        case_id=decision.case_id,
+        student_decision=decision.student_decision,
+        decided_at=decision.decided_at,
     )
 
 

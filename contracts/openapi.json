@@ -555,6 +555,74 @@
           }
         }
       }
+    },
+    "/api/v1/cases/{case_id}/student-decision": {
+      "post": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Student accepts or customizes the proposed plan",
+        "description": "Student accepts or customizes the agent-proposed intervention plan.\n\nTransition ownership, plan selection, audit row and PLAN_ACCEPTED emission\nlive in the Student Action Service (03_SYSTEM_SPEC §10.2, §8.2). Scope:\nacceptance rows only — decline is a deferred slice.",
+        "operationId": "student_plan_decision_api_v1_cases__case_id__student_decision_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentDecisionResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case not in PLAN_PROPOSED, or multiple proposed plans await a student decision (03_SYSTEM_SPEC §10.2)"
+          },
+          "400": {
+            "description": "No proposed plan awaiting a student decision for this case"
+          },
+          "403": {
+            "description": "Case does not belong to the authenticated student"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -997,6 +1065,64 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "StudentDecisionRequest": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "CUSTOMIZED"
+            ],
+            "title": "Decision"
+          },
+          "plan_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Actions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "StudentDecisionRequest",
+        "description": "Student plan decision (03_SYSTEM_SPEC §10.2 student acceptance rows).\n\nScope: ACCEPTANCE only — ACCEPTED and CUSTOMIZED both move the case\nPLAN_PROPOSED → PENDING_APPROVAL (event PLAN_ACCEPTED). Decline\n(→ REPLAN_REQUIRED) is a deferred slice: its value is absent from the\nLiteral, so clients receive 422 instead of a silent half-transition."
+      },
+      "StudentDecisionResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "student_decision": {
+            "type": "string",
+            "title": "Student Decision"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Decided At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "student_decision",
+          "decided_at"
+        ],
+        "title": "StudentDecisionResponse"
       },
       "StudentMentorViewResponse": {
         "properties": {

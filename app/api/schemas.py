@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -163,3 +163,34 @@ class CaseApproveResponse(BaseModel):
     case_id: UUID
     mentor_decision: str
     acted_at: datetime
+
+
+class StudentDecisionRequest(BaseModel):
+    """Student plan decision (03_SYSTEM_SPEC §10.2 student acceptance rows).
+
+    Scope: ACCEPTANCE only — ACCEPTED and CUSTOMIZED both move the case
+    PLAN_PROPOSED → PENDING_APPROVAL (event PLAN_ACCEPTED). Decline
+    (→ REPLAN_REQUIRED) is a deferred slice: its value is absent from the
+    Literal, so clients receive 422 instead of a silent half-transition.
+    """
+    decision: Literal["ACCEPTED", "CUSTOMIZED"]
+    plan_actions: list[dict] | None = None
+
+    @model_validator(mode="after")
+    def _check_plan_actions(self) -> "StudentDecisionRequest":
+        # 02_USER_JOURNEYS 1.1 Step 6: "There is no silent default."
+        if self.decision == "CUSTOMIZED" and not self.plan_actions:
+            raise ValueError(
+                "plan_actions is required and must be non-empty for a CUSTOMIZED decision"
+            )
+        if self.decision == "ACCEPTED" and self.plan_actions is not None:
+            raise ValueError(
+                "plan_actions may only accompany a CUSTOMIZED decision"
+            )
+        return self
+
+
+class StudentDecisionResponse(BaseModel):
+    case_id: UUID
+    student_decision: str
+    decided_at: datetime

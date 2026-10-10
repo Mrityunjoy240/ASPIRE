@@ -2,26 +2,23 @@
 # Integration tests for API routers
 # Verifies auth rejection, response schemas for /health, /attendance/what-if, /cases/queue
 
-import pytest
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.main import app
-from app.models.enums import UserRole, AttendanceStatus, TaskStatus, InterventionCaseStatus
-from app.models.student import StudentProfile
-from app.models.users import User, UserRoleAssignment
-from app.models.attendance import AttendanceRecord, AttendanceDerivedState
-from app.models.attendance import AttendanceRecord
-from app.models.academic import CourseRun, Course, Semester, Batch, Programme
+from app.models.attendance import AttendanceDerivedState
+from app.models.enums import (
+    InterventionCaseStatus,
+    UserRole,
+)
 from app.models.intervention import InterventionCase, InterventionPlan
-from app.models.tasks import StudentTask
-from app.models.enums import TaskSourceType, TaskStatus
+from app.models.student import StudentProfile
 
 
 # TestClient fixture
@@ -100,17 +97,16 @@ def test_attendance_what_if_response_schema(mock_threshold, mock_get_auth, mock_
     """Attendance what-if should return correct schema."""
     mock_get_auth.return_value = mock_student_auth
     mock_threshold.return_value = Decimal("75.00")
-    
+
     # Mock session execute
     mock_session = AsyncMock()
     mock_get_session.return_value = mock_session
-    
+
     student_id = uuid4()
     course_id = uuid4()
     course_run_id = uuid4()
-    
+
     # Mock derived state
-    from app.models.attendance import AttendanceDerivedState
     derived = AttendanceDerivedState(
         id=uuid4(),
         student_id=student_id,
@@ -120,17 +116,17 @@ def test_attendance_what_if_response_schema(mock_threshold, mock_get_auth, mock_
         attendance_percentage=Decimal("60.00"),
         risk_band="CRITICAL",
         required_to_recover=4,
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
     )
-    
+
     mock_result = MagicMock()
     mock_result.first.return_value = (derived, MagicMock(course_id=course_id))
     mock_session.execute.return_value = mock_result
-    
+
     mock_get_auth.return_value = mock_student_auth
-    
+
     response = client.get(f"/api/v1/attendance/{student_id}/what-if?target=75.0&course_id={course_id}")
-    
+
     # If we get here, check schema
     if response.status_code == 200:
         data = response.json()
@@ -158,19 +154,19 @@ def test_cases_queue_requires_mentor_or_admin(mock_get_auth, mock_get_session, c
 def test_cases_queue_response_schema(mock_get_auth, mock_get_session, client, mock_mentor_auth):
     """Cases queue should return correct schema when authorized."""
     mock_get_auth.return_value = mock_mentor_auth
-    
+
     # Mock session
     mock_session = AsyncMock()
     mock_get_session.return_value = mock_session
     mock_get_auth.return_value = mock_mentor_auth
-    
+
     # Mock empty queue
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []
     mock_session.execute.return_value = mock_result
-    
+
     response = client.get("/api/v1/cases/queue")
-    
+
     if response.status_code == 200:
         data = response.json()
         assert isinstance(data, list)
@@ -193,17 +189,17 @@ def test_cases_queue_response_schema(mock_get_auth, mock_get_session, client, mo
 def test_task_complete_requires_ownership(mock_get_auth, mock_get_session, client, mock_student_auth):
     """Task completion should require student to own the task."""
     mock_get_auth.return_value = mock_student_auth
-    
+
     mock_session = AsyncMock()
     mock_get_session.return_value = mock_session
-    
+
     # Task not found or not owned
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result
-    
+
     mock_get_auth.return_value = mock_student_auth
-    
+
     response = client.post(f"/api/v1/tasks/{uuid4()}/complete", json={})
     # No auth header -> 401 Unauthorized
     assert response.status_code == 401
@@ -215,8 +211,6 @@ def test_task_complete_requires_ownership(mock_get_auth, mock_get_session, clien
 def approve_deps():
     """Temporarily install dependency overrides for auth/session."""
     from app.main import app as main_app
-    from app.api.deps import get_auth_context
-    from app.core.database import get_session
 
     saved = dict(main_app.dependency_overrides)
     yield main_app.dependency_overrides
@@ -233,7 +227,7 @@ def _override_auth_and_session(overrides, auth, session):
 
 
 def _case_and_plan(case_id: uuid.UUID, mentor_id: uuid.UUID, status):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     case = InterventionCase(
         id=case_id,
         student_id=uuid4(),
@@ -416,7 +410,7 @@ def test_approve_422_invalid_decision(approve_deps, client, mock_mentor_auth):
 # ---- P1 remediation regressions (F-01 / F-03) ----
 
 def _plan(case_id, *, status="ACCEPTED", mentor_decision=None, days_ago=0):
-    now = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    now = datetime.now(UTC) - timedelta(days=days_ago)
     return InterventionPlan(
         id=uuid4(),
         case_id=case_id,
@@ -508,10 +502,10 @@ def test_f03_case_row_selected_for_update(approve_deps, client, mock_mentor_auth
     concurrent approvals serialize and exactly one observes PENDING_APPROVAL."""
     from sqlalchemy.dialects import postgresql
 
-    from app.api.routers.cases import _case_for_approval_query
+    from app.api.routers.cases import _case_row_for_update
 
     sql = str(
-        _case_for_approval_query(uuid4()).compile(dialect=postgresql.dialect())
+        _case_row_for_update(uuid4()).compile(dialect=postgresql.dialect())
     )
     assert "FOR UPDATE" in sql.upper()
 
@@ -590,7 +584,7 @@ def test_f01_router_plan_query_survives_plan_history_real_db():
         engine,
         tables=[InterventionCase.__table__, InterventionPlan.__table__],
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     case_id = uuid4()
     with Session(engine) as db:
         db.add(InterventionCase(
@@ -609,6 +603,364 @@ def test_f01_router_plan_query_survives_plan_history_real_db():
         plans = list(db.execute(_plans_for_case_query(case_id)).scalars().all())
         assert len(plans) == 2
         assert plans[0].status == "ACCEPTED"  # created_at DESC ordering
+
+
+# ============ Student Plan Decision (student acceptance slice) ============
+
+@pytest.fixture
+def student_deps():
+    """Temporarily install dependency overrides for auth/session."""
+    from app.main import app as main_app
+
+    saved = dict(main_app.dependency_overrides)
+    yield main_app.dependency_overrides
+    main_app.dependency_overrides.clear()
+    main_app.dependency_overrides.update(saved)
+
+
+def _student_profile(user_id: uuid.UUID, profile_id: uuid.UUID | None = None) -> StudentProfile:
+    now = datetime.now(UTC)
+    return StudentProfile(
+        id=profile_id or uuid4(),
+        user_id=user_id,
+        batch_id=uuid4(),
+        roll_number="BCREC-0001",
+        enrollment_year=2024,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _proposed_plan(case_id: uuid.UUID, days_ago: int = 0) -> InterventionPlan:
+    now = datetime.now(UTC) - timedelta(days=days_ago)
+    return InterventionPlan(
+        id=uuid4(),
+        case_id=case_id,
+        created_by="SYSTEM_AGENT",
+        status="PROPOSED",
+        plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS"}],
+        reason_codes=["LOW_ATTENDANCE"],
+        evidence={},
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _student_case(case_id: uuid.UUID, student_id: uuid.UUID, status):
+    now = datetime.now(UTC)
+    return InterventionCase(
+        id=case_id,
+        student_id=student_id,
+        mentor_id=uuid4(),
+        status=status,
+        urgency_band="URGENT",
+        opened_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def test_student_decision_requires_auth(client):
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 401
+
+
+def test_student_decision_happy_path_emits_event(student_deps, client, mock_student_auth):
+    """200: PLAN_PROPOSED → PENDING_APPROVAL, response schema, audit row,
+    PLAN_ACCEPTED emitted post-commit (03 §10.2, §8.2; 07 §4)."""
+    from app.main import app as main_app
+    from app.services.student_action_service import EVENT_PLAN_ACCEPTED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_ACCEPTED, recorder)
+    try:
+        response = client.post(
+            f"/api/v1/cases/{case_id}/student-decision",
+            json={"decision": "ACCEPTED"},
+        )
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"case_id", "student_decision", "decided_at"}
+    assert data["case_id"] == str(case_id)
+    assert data["student_decision"] == "ACCEPTED"
+
+    assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+    assert plan.status == "ACCEPTED"
+    assert plan.student_decision == "ACCEPTED"
+    assert plan.decided_at is not None
+    session.add.assert_called_once()
+    session.commit.assert_awaited()
+    audit = session.add.call_args[0][0]
+    assert audit.action_type == "PLAN_ACCEPTED"
+    assert audit.source_system == "STUDENT_APP"
+    assert audit.entity_id == plan.id
+
+    assert len(received) == 1
+    assert received[0].event_type == "PLAN_ACCEPTED"
+    assert received[0].payload["previous_status"] == "PLAN_PROPOSED"
+    assert received[0].payload["new_status"] == "PENDING_APPROVAL"
+
+
+def test_student_decision_customized_persists_actions(student_deps, client, mock_student_auth):
+    """200: CUSTOMIZED persists the student's adjusted plan_actions."""
+    from app.main import app as main_app
+    from app.services.student_action_service import EVENT_PLAN_ACCEPTED
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_ACCEPTED, recorder)
+    edited = [{"type": "STUDY_BLOCK", "topic": "DBMS Unit 3", "duration_min": 45}]
+    try:
+        response = client.post(
+            f"/api/v1/cases/{case_id}/student-decision",
+            json={"decision": "CUSTOMIZED", "plan_actions": edited},
+        )
+    finally:
+        bus.clear()
+
+    assert response.status_code == 200
+    assert response.json()["student_decision"] == "CUSTOMIZED"
+    assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+    assert plan.status == "CUSTOMIZED"
+    assert plan.plan_actions == edited
+    assert [e.event_type for e in received] == [EVENT_PLAN_ACCEPTED]
+
+
+def test_student_decision_404_unknown_case(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None)
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 404
+
+
+def test_student_decision_403_wrong_role(student_deps, client, mock_mentor_auth):
+    """A mentor may not act on this endpoint — §10.2 actor for these rows is
+    the Student (role gate runs before the handler)."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    _override_auth_and_session(student_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 403
+    session.add.assert_not_called()
+
+
+def test_student_decision_403_not_own_case(student_deps, client, mock_student_auth):
+    """Student (own data only): a case belonging to another student is 403."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, uuid4(), InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 403
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+    assert case.status == InterventionCaseStatus.PLAN_PROPOSED
+
+
+def test_student_decision_400_no_plan(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    session.execute = _result_returning(case, profile, [])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 400
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_student_decision_409_illegal_transition(student_deps, client, mock_student_auth):
+    """03_SYSTEM_SPEC §10.2: student decisions only from PLAN_PROPOSED."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.ACTIVE)
+    plan = _proposed_plan(case_id)
+    session.execute = _result_returning(case, profile, [plan])
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_student_decision_409_ambiguous_plans(student_deps, client, mock_student_auth):
+    """Two proposed plans await the verdict → refuse, never guess (409)."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    session.execute = _result_returning(
+        case, profile, [_proposed_plan(case_id, days_ago=2), _proposed_plan(case_id, days_ago=1)]
+    )
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+    )
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_student_decision_422_decline_is_deferred(student_deps, client, mock_student_auth):
+    """Decline (→ REPLAN_REQUIRED) is a deferred slice: 422 at the contract
+    boundary, never a silent half-transition."""
+    session = AsyncMock()
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "DECLINED"}
+    )
+    assert response.status_code == 422
+
+
+def test_student_decision_422_customized_without_actions(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision", json={"decision": "CUSTOMIZED"}
+    )
+    assert response.status_code == 422
+
+
+def test_student_decision_422_accept_with_actions(student_deps, client, mock_student_auth):
+    session = AsyncMock()
+    _override_auth_and_session(student_deps, mock_student_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/student-decision",
+        json={"decision": "ACCEPTED", "plan_actions": [{"type": "STUDY_BLOCK"}]},
+    )
+    assert response.status_code == 422
+
+
+def test_student_decision_double_post_only_one_transition_wins(
+    student_deps, client, mock_student_auth
+):
+    """Idempotency/concurrency: request A commits the transition; request B
+    (serialized behind the FOR UPDATE row lock, then re-reading A's committed
+    state) receives 409. Exactly one audit row and one PLAN_ACCEPTED event."""
+    from app.main import app as main_app
+    from app.services.student_action_service import EVENT_PLAN_ACCEPTED
+
+    case_id = uuid4()
+    profile = _student_profile(mock_student_auth.user_id)
+    case = _student_case(case_id, profile.id, InterventionCaseStatus.PLAN_PROPOSED)
+    plan = _proposed_plan(case_id)
+
+    bus = main_app.state.event_bus
+    bus.clear()
+    received = []
+
+    async def recorder(event):
+        received.append(event)
+
+    bus.subscribe(EVENT_PLAN_ACCEPTED, recorder)
+    try:
+        # --- Request A (acquires the FOR UPDATE lock) ---
+        session_a = AsyncMock()
+        session_a.add = MagicMock()
+        session_a.execute = _result_returning(case, profile, [plan])
+        _override_auth_and_session(student_deps, mock_student_auth, session_a)
+
+        resp_a = client.post(
+            f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+        )
+        assert resp_a.status_code == 200
+        assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+
+        # --- Request B (blocked until A committed; reads post-A state) ---
+        session_b = AsyncMock()
+        session_b.add = MagicMock()
+        session_b.execute = _result_returning(case, profile, [plan])
+        _override_auth_and_session(student_deps, mock_student_auth, session_b)
+
+        resp_b = client.post(
+            f"/api/v1/cases/{case_id}/student-decision", json={"decision": "ACCEPTED"}
+        )
+        assert resp_b.status_code == 409
+        assert "PLAN_PROPOSED" in resp_b.json()["detail"]
+    finally:
+        bus.clear()
+
+    assert len(received) == 1
+    assert received[0].event_type == "PLAN_ACCEPTED"
+    assert session_a.add.call_count == 1  # single audit row
+    session_b.add.assert_not_called()
+    session_b.commit.assert_not_awaited()
+    assert case.status == InterventionCaseStatus.PENDING_APPROVAL
+    assert plan.student_decision == "ACCEPTED"
+
+
+def test_student_decision_uses_row_lock():
+    """The student path locks the same case row FOR UPDATE (03 §10.2 single
+    transition per state; PostgreSQL row lock, no external lock service)."""
+    from sqlalchemy.dialects import postgresql
+
+    from app.api.routers.cases import _case_row_for_update
+
+    sql = str(_case_row_for_update(uuid4()).compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in sql.upper()
 
 
 # ============ OpenAPI Contract Tests ============
@@ -630,7 +982,7 @@ def test_openapi_contract_generation():
 def test_require_roles_factory():
     """Test require_roles dependency factory."""
     from app.api.deps import require_roles
-    
+
     dep = require_roles(UserRole.MENTOR, UserRole.ADMIN)
     assert callable(dep)
 
