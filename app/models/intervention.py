@@ -4,7 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import JSON, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -19,7 +19,11 @@ class InterventionCase(Base):
     mentor_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     status: Mapped[InterventionCaseStatus] = mapped_column(default=InterventionCaseStatus.OPEN.value, nullable=False)
     urgency_band: Mapped[str] = mapped_column(String, nullable=False)  # URGENT | ATTENTION | MONITOR
-    trigger_events: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    # JSONB per migration 009 (schema authority); sqlite variant serves only
+    # the F-01 in-memory real-query test, where JSONB cannot compile DDL.
+    trigger_events: Mapped[list[str] | None] = mapped_column(
+        JSONB().with_variant(JSON, "sqlite"), nullable=True
+    )
     opened_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     resolved_at: Mapped[datetime | None]
     closed_at: Mapped[datetime | None]
@@ -45,14 +49,20 @@ class InterventionPlan(Base):
     case_id: Mapped[UUID] = mapped_column(ForeignKey("intervention_cases.id", ondelete="RESTRICT"))
     created_by: Mapped[str] = mapped_column(Text, nullable=False)  # 'SYSTEM_AGENT' or user UUID
     status: Mapped[str] = mapped_column(Text, nullable=False)  # PROPOSED | ACCEPTED | CUSTOMIZED | DECLINED | SUPERSEDED
-    plan_actions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    # JSONB per migration 009 (sqlite variant: see trigger_events note).
+    plan_actions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB().with_variant(JSON, "sqlite"), nullable=False
+    )
     # TEXT[] NOT NULL per migration 009 (the schema authority). The sqlite
     # variant exists only for the in-memory real-query regression tests,
     # where a PostgreSQL ARRAY type cannot compile DDL.
     reason_codes: Mapped[list[str]] = mapped_column(
         ARRAY(Text).with_variant(JSON, "sqlite"), nullable=False
     )
-    evidence: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    # JSONB per migration 009 (sqlite variant: see trigger_events note).
+    evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSONB().with_variant(JSON, "sqlite"), nullable=False
+    )
     student_decision: Mapped[str | None] = mapped_column(Text)  # ACCEPTED | DECLINED | CUSTOMIZED
     student_reason: Mapped[str | None] = mapped_column(Text)
     decided_at: Mapped[datetime | None]
