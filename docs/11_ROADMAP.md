@@ -23,15 +23,15 @@
 
 ### B. Domain & State Machines
 - [ ] All §10.2 transitions implemented in owning services with 409 illegal-transition + ambiguity refusal. *(tests per row of the table)*
-- [ ] Case creation producer (Supervisor/risk path) emits catalog events only; OPEN→IN_REVIEW covered.
+- [ ] Case creation producer (Supervisor/risk path) emits catalog events only; OPEN→IN_REVIEW covered. *(R2: OPEN→IN_REVIEW implemented + tested via `app/services/case_intake.py`; producer emits **no** catalog event — none exists for case creation; adding one needs the ADR-002 process)*
 - [ ] Plan-creation producer persists DEC-01 evidence entries via `convert_llm_evidence`/`build_evidence_entry`. *(round-trip test)*
 - [ ] Task engine endpoints (create/assign/update) exist with audit rows; OVERDUE stays derived (DM-SS02).
 - [ ] Rule precedence + effective-date filtering implemented **only after** ADR-003 §6.4 decision. *(precedence + dating tests against real PG)*
 
 ### C. Events, Scheduler, Agents
 - [ ] Scheduler: startup + 5-minute loop, idempotent, emits only, never mutates (DM-AG03). *(deterministic clock tests; duplicate-tick idempotency test)*
-- [ ] Supervisor graph consumes catalog events, routes per `06`, uses tools = typed FastAPI calls only. *(boundary tests: no SQL, no provider calls)*
-- [ ] LLMService wired into agents; MOCK-mode E2E plan-generation test; schema-rejection test. *(pytest without network)*
+- [ ] Supervisor graph consumes catalog events, routes per `06`, uses tools = typed FastAPI calls only. *(boundary tests: no SQL, no provider calls)* *(R2 partial: consumes + routes per the frozen `06 §1` table over all 8 catalog triggers, boundary tests pass; tools are injected **service-backed callables** (`app/agents/tools.py`), not typed FastAPI self-calls — deliberate per R2 brief "no bypass of domain services"; typed-HTTP-tool ideal deferred to the LangGraph slice)*
+- [ ] LLMService wired into agents; MOCK-mode E2E plan-generation test; schema-rejection test. *(pytest without network)* *(R2 partial: LLMService wired into the attendance specialist stub; MOCK round-trip + schema-rejection + LLM-unavailable-degradation tests pass; plan **generation/persistence** is R3 — nothing persisted in R2)*
 - [ ] LLM audit metadata (`request_id`, `prompt_version`, `model`, `outcome`, …) persisted per `06 §5`.
 - [ ] Prompt-injection defense tests per `07 §3` (untrusted document content cannot alter tool args). *(fixture suite from `08_EVALS`)*
 
@@ -60,7 +60,7 @@
 | # | Slice | Effort | Risk | Depends on | Test evidence required |
 |---|---|---|---|---|---|
 | R1 | **P0 security/correctness hardening** (ADR-003 §6.3: broken `Depends`, int-raises, ownership stub, dead auth module) | S | Low — regression-guarded | — | New/updated router tests: 401/403 matrix incl. cross-student denial; full suite green; OpenAPI regen (4xx shape may change — document); CI run via PR |
-| R2 | **Supervisor wiring on the event bus** (subscribe to existing catalog events; MOCK LLMService; create case OPEN→IN_REVIEW; route to attendance specialist stub) | M | Medium — first agent code; keep tools read-only + case-create only | R1 (auth path stable) | Agent boundary tests (no SQL/provider), MOCK round-trip, event ordering, audit row per agent run; suite + CI green |
+| R2 | **Supervisor wiring on the event bus** (subscribe to existing catalog events; MOCK LLMService; create case OPEN→IN_REVIEW; route to attendance specialist stub) | M | Medium — first agent code; keep tools read-only + case-create only | R1 (auth path stable) | Agent boundary tests (no SQL/provider), MOCK round-trip, event ordering, audit row per agent run; suite + CI green | *(implemented in working tree 11 Oct 2026, `feature/vertical-slice-case-approval` at `94cd568`; +35 unit +4 PG-integration tests, suite 270/0 with DSN; case-ensure = attendance WARNING/CRITICAL only and initial urgency CRITICAL→URGENT/WARNING→ATTENTION both confirmed against 03 §6.1/§10.2 + 02 §1.1 in the 11 Oct semantic review; "audit row per agent run" scoped to privileged writes only per `07 §4` — route-only runs logged, not audit-logged; service-backed tools, not HTTP self-calls — see `AI_WORKING_STATE.md` R2 record; NOT committed/pushed)* |
 | R3 | **Agent proposal production** (`IN_REVIEW/REPLAN_REQUIRED → PLAN_PROPOSED`; DEC-01 producer integration; plan rows with evidence entries) | M | Medium — persistence + LLM contract | R2 | Producer round-trip (persisted shape → fresh read), malformed-LLM rejection, zero-fabrication tests; OpenAPI unchanged (no new HTTP surface) or drift-regenerated |
 | R4 | **Scheduler (DM-AG03)** (startup + 5-min loop; TASK_OVERDUE / EXAM_APPROACHING / MENTOR_FOLLOWUP_DUE emission only) | M | Low-medium — idempotency critical | R2 | Clock-injected tests; duplicate-tick no-op; no business mutation assertion |
 | R5 | **Remaining §10.2 transitions + follow-up consumers** (ACTIVE→MONITORING→RESOLVED/CLOSED, REPLAN consumers) | M | Medium — RULE_ENGINE actor semantics | R3, R4 | Per-row transition tests; concurrency lock test pattern reuse |

@@ -2,14 +2,14 @@
 # API Dependencies — Supabase JWT validation, role resolution, auth helpers
 # Security (07 §1-§2): Supabase Auth owns identity; ASPIRE user_role_assignments owns roles.
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from jose.utils import base64url_decode
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -18,9 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.events import EventBus
-from app.models.users import User, UserRoleAssignment
 from app.models.enums import UserRole
-
+from app.models.users import User, UserRoleAssignment
 
 # Security scheme
 security = HTTPBearer(auto_error=False)
@@ -72,8 +71,8 @@ def _get_signing_key(token: str) -> str:
     for key in jwks.keys:
         if key.kid == kid:
             # Reconstruct PEM from JWK (RSA)
-            from cryptography.hazmat.primitives.asymmetric import rsa
             from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
             n = base64url_decode(key.n.encode()).hex()
             e = base64url_decode(key.e.encode()).hex()
             # Construct public key from modulus and exponent
@@ -136,7 +135,7 @@ async def get_auth_context(
         raise HTTPException(status_code=403, detail="User account suspended")
 
     # Get active role assignments for user's institution
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await session.execute(
         select(UserRoleAssignment).where(
             UserRoleAssignment.user_id == user_id,
@@ -299,10 +298,12 @@ async def require_student_self_or_mentor(
     raise denied
 
 
-# Audit logging helper
+# Audit logging helper. actor_id is nullable (migration 007: users FK with
+# SET NULL) so agent/rule-engine runs — which have no acting user — can write
+# their required audit rows with actor_type SYSTEM_AGENT/RULE_ENGINE.
 async def log_audit(
     session: AsyncSession,
-    actor_id: UUID,
+    actor_id: UUID | None,
     actor_type: str,
     action_type: str,
     entity_table: str,
@@ -321,7 +322,7 @@ async def log_audit(
         previous_state=previous_state,
         new_state=new_state,
         source_system=source_system,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     session.add(log)
 

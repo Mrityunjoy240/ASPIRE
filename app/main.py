@@ -8,20 +8,36 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.agents.attendance_specialist import AttendanceSpecialist
+from app.agents.supervisor import Supervisor
+from app.agents.tools import ServiceBackedTools
+from app.api.routers import assessments, attendance, cases, students, tasks
 from app.core.config import settings
 from app.core.database import engine
 from app.core.events import EventBus
-from app.api.routers import students, attendance, assessments, tasks, cases
 from app.services.llm_service import get_llm_service
+
+
+def build_supervisor(llm_service) -> Supervisor:
+    """Default Supervisor wiring: service-backed tools + attendance stub."""
+    tools = ServiceBackedTools()
+    specialist = AttendanceSpecialist(tools=tools, llm=llm_service)
+    return Supervisor(tools=tools, attendance_specialist=specialist)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    get_llm_service()  # Initialize LLMService singleton
+    llm = get_llm_service()  # Initialize LLMService singleton
+    # Supervisor event-bus registration (11_ROADMAP R2). Idempotent per bus:
+    # repeated TestClient startup/shutdown cycles never double-subscribe.
+    supervisor = getattr(app.state, "supervisor", None)
+    if supervisor is None:
+        supervisor = build_supervisor(llm)
+        app.state.supervisor = supervisor
+    supervisor.ensure_subscribed(app.state.event_bus)
     yield
     # Shutdown
-    llm = get_llm_service()
     await llm.close()
     await engine.dispose()
 

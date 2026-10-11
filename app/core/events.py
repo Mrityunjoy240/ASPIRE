@@ -9,7 +9,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ class DomainEvent:
     source_id: uuid.UUID
     payload: dict[str, Any]
     event_id: uuid.UUID = field(default_factory=uuid.uuid4)
-    occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     data_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -59,6 +59,10 @@ class EventBus:
 
     def subscribe(self, event_type: str, handler: EventHandler) -> None:
         self._subscribers[event_type].append(handler)
+
+    def subscriber_count(self, event_type: str) -> int:
+        """Number of handlers registered for a type (registration tests)."""
+        return len(self._subscribers.get(event_type, []))
 
     async def publish(self, event: DomainEvent) -> None:
         logger.info(
