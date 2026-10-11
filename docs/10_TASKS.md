@@ -6,6 +6,10 @@
 **Date:** 03 October 2026
 **Version:** 1.0
 
+> [!WARNING]
+> **STALE STATUSES — SUPERSEDED FOR ORDERING BY `docs/11_ROADMAP.md` (11 Oct 2026, Phase-0 reconciliation, ADR-003).**
+> The READY/DONE/BLOCKED markings below predate the tech-selection reset and the 26-commit implementation on `feature/vertical-slice-case-approval` (auth, migrations 001–013, engines, case vertical slices, CI). Most Phase 0–6 tasks marked BLOCKED/READY here are already substantially built. **Do not execute this queue as-is.** Historical prompts are preserved for reference; the authoritative build order, effort/risk estimates, and acceptance criteria now live in `docs/11_ROADMAP.md` (pending team-lead ratification). Architecture baseline: `docs/decisions/ADR-003_CORE_PLATFORM_RECONCILIATION.md`.
+
 ---
 
 > [!IMPORTANT]

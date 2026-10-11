@@ -23,6 +23,7 @@ from app.api.schemas import (
     StudentDecisionResponse,
 )
 from app.core.events import EventBus
+from app.models.academic import Batch
 from app.models.intervention import InterventionCase, InterventionPlan
 from app.models.student import StudentProfile
 from app.models.tasks import StudentTask
@@ -47,12 +48,19 @@ async def get_mentor_queue(
     session = Depends(get_session),
 ):
     """Mentor queue ordered by Urgency Band → Exam Proximity → Days Since Last Action (DM-SS03)."""
-    
-    # Get cases for this mentor (or all if admin/HOD)
-    if auth.is_admin() or auth.has_role("HOD"):
+
+    # Mentors see only their assigned cases. Admin (all cases) and HOD are
+    # scoped to their own institution (07 §2: Admin = all WITHIN own
+    # institution; student->institution resolves through batch_id — 003/004).
+    # A NULL institution_id matches nothing (fail closed).
+    if auth.is_admin() or auth.has_role(UserRole.HOD):
         result = await session.execute(
             select(InterventionCase)
-            .where(InterventionCase.status.in_([
+            .join(StudentProfile, InterventionCase.student_id == StudentProfile.id)
+            .join(Batch, StudentProfile.batch_id == Batch.id)
+            .where(
+                Batch.institution_id == auth.institution_id,
+                InterventionCase.status.in_([
                 InterventionCaseStatus.OPEN,
                 InterventionCaseStatus.IN_REVIEW,
                 InterventionCaseStatus.PLAN_PROPOSED,
@@ -207,8 +215,26 @@ async def approve_case(
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
 
-    if not (auth.is_admin() or auth.has_role("HOD") or case.mentor_id == auth.user_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not this case's mentor")
+    # Record-level authorization (07 §2): the assigned mentor always qualifies;
+    # admin/HOD qualify only inside their own institution (student -> batch ->
+    # institution). Every refusal uses the same detail (no scope oracle).
+    if case.mentor_id != auth.user_id:
+        if not (auth.is_admin() or auth.has_role(UserRole.HOD)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this case",
+            )
+        result = await session.execute(
+            select(Batch.institution_id)
+            .join(StudentProfile, StudentProfile.batch_id == Batch.id)
+            .where(StudentProfile.id == case.student_id)
+        )
+        case_institution_id = result.scalar_one_or_none()
+        if case_institution_id is None or case_institution_id != auth.institution_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized for this case",
+            )
 
     result = await session.execute(_plans_for_case_query(case_id))
     plans = list(result.scalars().all())

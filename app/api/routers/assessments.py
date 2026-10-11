@@ -2,7 +2,7 @@
 # Assessments API Router — component breakdown & trend signals
 
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,12 +24,12 @@ router = APIRouter(prefix="/api/v1/assessments", tags=["Assessments"])
     "/{student_id}/summary",
     response_model=AssessmentSummaryResponse,
     summary="Assessment breakdown & trend signals per course",
-    dependencies=[Depends(lambda auth=Depends(): require_student_self_or_mentor(auth))],
+    dependencies=[Depends(require_student_self_or_mentor)],
 )
 async def get_assessment_summary(
     student_id: UUID,
     course_id: UUID,
-    auth = Depends(lambda: Depends(get_auth_context)()),
+    auth = Depends(get_auth_context),
     session = Depends(get_session),
 ):
     """Assessment component breakdown with trend for a specific course."""
@@ -44,7 +44,9 @@ async def get_assessment_summary(
     )
     student_info = result.first()
     if not student_info:
-        raise status.HTTP_404_NOT_FOUND
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+        )
     
     batch_id, enrollment_year = student_info
     
@@ -56,7 +58,9 @@ async def get_assessment_summary(
     )
     semester_id = result.scalar_one_or_none()
     if not semester_id:
-        raise status.HTTP_404_NOT_FOUND
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="No active semester found"
+        )
     
     # Get course run
     result = await session.execute(
@@ -69,7 +73,9 @@ async def get_assessment_summary(
     )
     course_run = result.first()
     if not course_run:
-        raise status.HTTP_404_NOT_FOUND
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course run not found"
+        )
     
     course_run_id, _, course_name = course_run
     

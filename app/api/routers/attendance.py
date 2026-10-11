@@ -3,13 +3,12 @@
 
 from decimal import Decimal
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
     get_auth_context,
-    require_roles,
     require_student_self_or_mentor,
     get_session,
 )
@@ -30,17 +29,19 @@ router = APIRouter(prefix="/api/v1/attendance", tags=["Attendance"])
     "/{student_id}/summary",
     response_model=list[AttendanceSummaryResponse],
     summary="Attendance summary with risk status per course",
-    dependencies=[Depends(require_roles("STUDENT", "MENTOR", "ADMIN", "HOD", "FACULTY"))],
+    dependencies=[Depends(require_student_self_or_mentor)],
 )
 async def get_attendance_summary(
     student_id: UUID,
     auth = Depends(get_auth_context),
     session = Depends(get_session),
 ):
-    """Attendance summary per course with risk bands."""
-    # Verify authorization
-    # (dependency handles student self or mentor/faculty)
-    
+    """Attendance summary per course with risk bands.
+
+    Record-level access is enforced by require_student_self_or_mentor
+    (own data / assigned mentee / own class / same-institution admin).
+    """
+
     # Get derived states for student
     result = await session.execute(
         select(AttendanceDerivedState, CourseRun, Course)
@@ -70,7 +71,7 @@ async def get_attendance_summary(
     "/{student_id}/what-if",
     response_model=AttendanceWhatIfResponse,
     summary="Deterministic attendance recovery calculator",
-    dependencies=[Depends(require_roles("STUDENT", "MENTOR", "ADMIN", "HOD", "FACULTY"))],
+    dependencies=[Depends(require_student_self_or_mentor)],
 )
 async def get_attendance_what_if(
     student_id: UUID,
@@ -95,7 +96,9 @@ async def get_attendance_what_if(
     )
     row = result.first()
     if not row:
-        raise status.HTTP_404_NOT_FOUND
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Attendance state not found"
+        )
     
     derived, course_run = row
     

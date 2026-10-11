@@ -216,18 +216,87 @@ def require_faculty_or_admin(auth: AuthContext = Depends(get_auth_context)) -> A
     return auth
 
 
-# Student can only access own data (mentor/admin can access mentees)
+# Single denial detail for every failure mode of the student-scoped ownership
+# check below: a foreign record, a nonexistent record, a cross-institution
+# record and an unsupported role must be indistinguishable (no existence
+# oracle — 07 §5 "Student data is confidential by default").
+STUDENT_SCOPE_DENIED = "Not authorized for this student"
+
+
 async def require_student_self_or_mentor(
     student_id: UUID,
     auth: AuthContext = Depends(get_auth_context),
+    session: AsyncSession = Depends(get_session),
 ) -> AuthContext:
-    """Allow student to access own data, or mentor/admin/faculty to access assigned."""
-    if auth.is_student():
-        # In real impl: verify student_id matches auth user's student profile
+    """Record-level authorization for a student-scoped read (07 §2 matrix,
+    DM-NEW-ORM01: role check alone is never sufficient — explicit row/scope
+    filtering is mandatory).
+
+    Allowed paths for student {student_id}'s records:
+      * the authenticated user IS that student (own academic data)
+      * ADMIN       — same institution (student_profiles.batch_id -> batches.institution_id)
+      * MENTOR      — assigned mentee (student_profiles.mentor_id)
+      * CLASS_TEACHER — own class (student_profiles.class_teacher_id)
+      * FACULTY     — assigned course runs only (course_runs.faculty_id, same batch)
+      * HOD         — denied: aggregates/escalations only, never individual
+                      student records by default (07 §2 matrix, 07 §5)
+
+    Every denial raises the same 403 detail so callers cannot probe whether a
+    student id exists."""
+    from app.models.academic import Batch, CourseRun
+    from app.models.student import StudentProfile
+
+    denied = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN, detail=STUDENT_SCOPE_DENIED
+    )
+
+    result = await session.execute(
+        select(StudentProfile, Batch.institution_id)
+        .join(Batch, StudentProfile.batch_id == Batch.id)
+        .where(StudentProfile.id == student_id)
+    )
+    row = result.first()
+    if not row:
+        # Missing profile and foreign profile are the same refusal.
+        raise denied
+    profile, institution_id = row
+
+    # Own data is always allowed (07 §2 "Own academic data: Student ✅ Read").
+    if profile.user_id == auth.user_id:
         return auth
-    if auth.has_role(UserRole.MENTOR, UserRole.ADMIN, UserRole.HOD, UserRole.FACULTY):
+
+    # Admin: everything inside own institution, nothing across institutions.
+    if auth.is_admin():
+        if institution_id == auth.institution_id:
+            return auth
+        raise denied
+
+    # Mentor: assigned mentees only (07 §2 "Mentee data: Mentor ✅ Read").
+    if auth.has_role(UserRole.MENTOR) and profile.mentor_id == auth.user_id:
         return auth
-    raise HTTPException(status_code=403, detail="Not authorized for this student")
+
+    # Class teacher: own class only (07 §2 "Class data: CT ✅ Own class").
+    if auth.has_role(UserRole.CLASS_TEACHER) and profile.class_teacher_id == auth.user_id:
+        return auth
+
+    # Faculty: assigned course runs only. course_runs.faculty_id (migration
+    # 003) is the scope-entity record; the student's batch bounds the runs in
+    # which they can appear. No assigned run for this batch -> denied.
+    if auth.has_role(UserRole.FACULTY):
+        result = await session.execute(
+            select(CourseRun.id)
+            .where(
+                CourseRun.faculty_id == auth.user_id,
+                CourseRun.batch_id == profile.batch_id,
+            )
+            .limit(1)
+        )
+        if result.first():
+            return auth
+        raise denied
+
+    # HOD (aggregates/escalations only) and any other role: fail closed.
+    raise denied
 
 
 # Audit logging helper

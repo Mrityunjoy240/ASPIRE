@@ -107,7 +107,7 @@
           "Attendance"
         ],
         "summary": "Attendance summary with risk status per course",
-        "description": "Attendance summary per course with risk bands.",
+        "description": "Attendance summary per course with risk bands.\n\nRecord-level access is enforced by require_student_self_or_mentor\n(own data / assigned mentee / own class / same-institution admin).",
         "operationId": "get_attendance_summary_api_v1_attendance__student_id__summary_get",
         "security": [
           {
@@ -237,6 +237,11 @@
         "summary": "Assessment breakdown & trend signals per course",
         "description": "Assessment component breakdown with trend for a specific course.",
         "operationId": "get_assessment_summary_api_v1_assessments__student_id__summary_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "student_id",
@@ -256,22 +261,6 @@
               "type": "string",
               "format": "uuid",
               "title": "Course Id"
-            }
-          },
-          {
-            "name": "args",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "title": "Args"
-            }
-          },
-          {
-            "name": "kwargs",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "title": "Kwargs"
             }
           }
         ],
@@ -305,7 +294,7 @@
           "Tasks"
         ],
         "summary": "Active/pending tasks for a student",
-        "description": "Return all pending/active tasks for a student.",
+        "description": "Return all pending/active tasks for a student.\n\nRecord-level access is enforced by require_student_self_or_mentor\n(own data / assigned mentee / own class / same-institution admin).",
         "operationId": "get_student_tasks_api_v1_tasks_student__student_id__get",
         "security": [
           {
@@ -358,7 +347,7 @@
           "Tasks"
         ],
         "summary": "Mark task as completed by student",
-        "description": "Student marks a task as completed.",
+        "description": "Student marks a task as completed (own tasks only).",
         "operationId": "complete_task_api_v1_tasks__task_id__complete_post",
         "security": [
           {
@@ -417,7 +406,7 @@
           "Tasks"
         ],
         "summary": "Snooze a task (student action)",
-        "description": "Student snoozes a task.",
+        "description": "Student snoozes their own task.",
         "operationId": "snooze_task_api_v1_tasks__task_id__snooze_post",
         "security": [
           {
