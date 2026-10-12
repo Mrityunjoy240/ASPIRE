@@ -202,6 +202,45 @@ async def test_intervention_route_without_payload_reads_open_case():
     assert any(c[0] == "read_open_cases" for c in tools.calls)
 
 
+async def test_duplicate_task_overdue_dispatch_has_no_business_effects():
+    """R4 crash-window consumer check: at-least-once scheduler dispatch can
+    deliver the same logical occurrence twice (recovery after a post-publish
+    crash — distinct event_id, identical source_id/payload). Each delivery
+    must stay route-only: repeated routing and reads are harmless; there is
+    no case write, no specialist call, no audit, no notification."""
+    open_case = uuid.uuid4()
+    supervisor, tools, specialist = make_supervisor(
+        tools=FakeTools(open_case_id=open_case)
+    )
+    bus = EventBus()
+    supervisor.ensure_subscribed(bus)
+
+    task_id = uuid.uuid4()
+    student_id = uuid.uuid4()
+
+    def _delivery() -> DomainEvent:  # same logical occurrence, new wire id
+        return DomainEvent(
+            event_type=EVENT_TASK_OVERDUE,
+            student_id=student_id,
+            source_id=task_id,
+            payload={
+                "task_id": str(task_id),
+                "title": "T",
+                "deadline": "2026-10-12T00:00:00+00:00",
+            },
+        )
+
+    await bus.publish(_delivery())
+    await bus.publish(_delivery())
+
+    writes = [c for c in tools.calls if c[0] == "create_intervention_case"]
+    assert writes == []  # duplicate delivery never compounds into writes
+    assert specialist.calls == []  # intervention route never assesses
+    reads = [c for c in tools.calls if c[0] == "read_open_cases"]
+    assert len(reads) == 2  # one read-only lookup per delivery
+    assert all(c[1] == student_id for c in reads)
+
+
 async def test_exam_approaching_with_risk_routes_attendance():
     tools = FakeTools(
         derived=DerivedStateSummary(row_count=2, has_risk_band=True, has_data_conflict=False)

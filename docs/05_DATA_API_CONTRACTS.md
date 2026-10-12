@@ -288,6 +288,54 @@ output_token_count      INT                 -- provider usage.completion_tokens;
 created_at              TIMESTAMPTZ NOT NULL  -- attempt initiation time (set at begin, never rewritten)
 ```
 
+### `scheduler_occurrences`
+Technical emission bookkeeping for the time-based scheduler (DM-AG03, `03` §8.3,
+`10_TASKS` T-062). Approved at the R4 contract gate: EC-SCH-01/03 require no
+duplicate logical events for triggers already emitted plus recovery of
+outstanding occurrences across process restarts — durable fired-trigger
+state; an in-memory set alone cannot satisfy it. Technical metadata only,
+never business state: the scheduler writes this table and nothing else (it
+never mutates `student_tasks`/case rows — DM-SS02).
+
+One row per logical occurrence `(event_type, source_id, trigger_value)`. The
+row is committed with `state = 'CLAIMED'` **before** the domain event is
+published (no claim → no emission), then flipped to `'EMITTED'` after
+publish. A `CLAIMED` row found on a later cycle means the process died
+between claim and publish-mark: the occurrence is re-emitted once and marked
+`EMITTED` (EC-SCH-02 — outstanding events are recovered, not lost; the
+unconfirmed window is the only at-least-once case, matching the
+`llm_attempt_audit` begin/finish posture). Already-`EMITTED` occurrences are
+skipped (SCH-02 / EC-SCH-03).
+
+**Delivery semantics (honest boundary, R4 crash-window review):** dispatch
+is **at-least-once, not exactly-once**. If the crash happened *after* the
+handlers ran but *before* the `EMITTED` commit, recovery re-dispatches the
+same logical occurrence — two bus deliveries with distinct `event_id`s and
+identical `(event_type, source_id, payload)` (proven by the window-B test
+in `tests/test_scheduler_pg.py`). `EMITTED` means `publish()` completed with
+all registered handlers awaited (handler failures are isolated and logged
+by the bus) — **not** that handlers succeeded; a failed handler is terminal
+and never retried (window D). No consumer-side dedup exists today, and none
+is needed while the sole `TASK_OVERDUE` consumer (Supervisor route-only)
+performs no business writes (proven by the duplicate-dispatch test in
+`tests/test_supervisor.py`). **Lead decision (option A, 12 Oct 2026):** a
+future writing consumer must dedup on this persisted logical identity
+before its first write — stable event identity + durable consumer-side
+deduplication is the approved approach; a transactional outbox is deferred
+(not required while the route is read-only). The volatile in-process bus
+(ARCH-02) cannot deliver exactly-once on its own.
+
+```sql
+event_type    TEXT NOT NULL               -- catalog name (03 §8.1), e.g. 'TASK_OVERDUE'
+source_id     UUID NOT NULL               -- triggering entity (e.g. student_tasks.id)
+trigger_value TIMESTAMPTZ NOT NULL        -- the time-condition value that fired (e.g. deadline)
+student_id    UUID REFERENCES student_profiles(id)
+state         TEXT NOT NULL DEFAULT 'CLAIMED'  -- CLAIMED | EMITTED
+claimed_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+emitted_at    TIMESTAMPTZ                 -- NULL while CLAIMED
+PRIMARY KEY (event_type, source_id, trigger_value)
+```
+
 ---
 
 ## 8. Unified Task Table

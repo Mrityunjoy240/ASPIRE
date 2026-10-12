@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     app_env: Literal["development", "staging", "production"] = "development"
     log_level: str = "INFO"
 
+    # Time-based scheduler (DM-AG03 / 03 §8.3): startup evaluation + every
+    # 5 minutes. Production default on; tests disable it (tests/conftest.py)
+    # so the test suite never connects to the configured DATABASE_URL.
+    scheduler_enabled: bool = True
+    scheduler_interval_seconds: int = 300
+
 
 @lru_cache
 def get_settings() -> Settings:

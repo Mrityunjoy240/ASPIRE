@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.events import EventBus
 from app.services.llm_service import get_llm_service
+from app.services.scheduler import cancel_scheduler_task, create_scheduler_task
 
 
 def build_supervisor(llm_service) -> Supervisor:
@@ -41,8 +42,13 @@ async def lifespan(app: FastAPI):
         supervisor = build_supervisor(llm)
         app.state.supervisor = supervisor
     supervisor.ensure_subscribed(app.state.event_bus)
+    # R4 / DM-AG03: startup evaluation + every 5 minutes (task is None when
+    # disabled — tests keep the "engine never connects" invariant).
+    scheduler_task = create_scheduler_task(app.state.event_bus)
+    app.state.scheduler_task = scheduler_task
     yield
-    # Shutdown
+    # Shutdown: stop the scheduler before disposing the engine it uses.
+    await cancel_scheduler_task(scheduler_task)
     await llm.close()
     await engine.dispose()
 

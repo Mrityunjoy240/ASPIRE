@@ -16,6 +16,7 @@ from app.models.intervention import InterventionCase, InterventionCaseStatus, In
 from app.models.learning import DocumentChunk, LearningDocument
 from app.models.llm_audit import LLMAttemptAudit
 from app.models.rules import InstitutionRule
+from app.models.scheduler import SchedulerOccurrence
 from app.models.student import StudentProfile
 from app.models.tasks import StudentTask, TaskSourceType, TaskStatus
 from app.models.users import User, UserRole, UserRoleAssignment
@@ -50,4 +51,5 @@ __all__ = [
     "DocumentChunk",
     "DataConflict",
     "InstitutionRule",
+    "SchedulerOccurrence",
 ]

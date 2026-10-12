@@ -27,12 +27,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from app.models.academic import Batch, Programme
-from app.models.enums import InterventionCaseStatus
-from app.models.institutions import Institution
-from app.models.intervention import InterventionCase, InterventionPlan
-from app.models.student import StudentProfile
-from app.models.users import User
+# The unit suite must never connect to the configured DATABASE_URL (CI
+# backend invariant: "the NullPool engine never connects during tests").
+# The R4 time-based scheduler (DM-AG03) opens a session at lifespan startup,
+# so tests disable it before app.core.config is first imported — settings
+# are lru_cached at import time.
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
+
+from app.models.academic import Batch, Programme  # noqa: E402
+from app.models.enums import InterventionCaseStatus  # noqa: E402
+from app.models.institutions import Institution  # noqa: E402
+from app.models.intervention import InterventionCase, InterventionPlan  # noqa: E402
+from app.models.student import StudentProfile  # noqa: E402
+from app.models.users import User  # noqa: E402
 
 DSN_ENV = "ASPIRE_TEST_PG_DSN"
 MIGRATIONS_DIR = Path(__file__).resolve().parents[1] / "db" / "migrations"
