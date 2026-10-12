@@ -1,6 +1,7 @@
 # app/agents/supervisor.py
 # Supervisor Agent (06_AGENT_SPEC §1) — deterministic routing of catalog
-# events on the in-process event bus (11_ROADMAP R2: wiring slice).
+# events on the in-process event bus (11_ROADMAP R2: wiring slice; R3 adds
+# the optional proposal hook below).
 #
 # Boundaries (06 §0/§1; Constitution A-01/A-04):
 #   * Routing is a pure lookup on the §1 table — never an LLM decision
@@ -10,7 +11,7 @@
 #     read_student_derived_state, read_open_cases, create_intervention_case).
 #   * Case writes are owned by app.services.case_intake (domain service);
 #     the Supervisor never mutates tables directly.
-#   * No LangGraph graph in R2 — plain deterministic wiring; the graph
+#   * No LangGraph graph in R2/R3 — plain deterministic wiring; the graph
 #     framework arrives with the specialist slices that need it.
 #
 # R2 scope decisions (recorded in docs/AI_WORKING_STATE.md):
@@ -35,6 +36,7 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from app.agents.proposal import ProposalOutcome
 from app.core.events import DomainEvent, EventBus
 
 logger = logging.getLogger(__name__)
@@ -153,6 +155,15 @@ class AttendanceSpecialistPort(Protocol):
     async def assess(self, student_id: UUID) -> AttendanceAssessment: ...
 
 
+class ProposalSpecialistPort(Protocol):
+    """Optional R3 surface: produce and persist an intervention plan for a
+    resolved case. Default None keeps every R2 wiring/test intact."""
+
+    async def produce_proposal(
+        self, *, student_id: UUID, case_id: UUID
+    ) -> ProposalOutcome: ...
+
+
 @dataclass(frozen=True, slots=True)
 class SupervisorRun:
     """06 §1 output contract plus originating-event traceability (§13).
@@ -184,9 +195,11 @@ class Supervisor:
         *,
         tools: SupervisorTools,
         attendance_specialist: AttendanceSpecialistPort,
+        proposal_specialist: ProposalSpecialistPort | None = None,
     ) -> None:
         self._tools = tools
         self._attendance = attendance_specialist
+        self._proposal = proposal_specialist
         self._bus: EventBus | None = None
 
     def ensure_subscribed(self, bus: EventBus) -> None:
@@ -269,6 +282,27 @@ class Supervisor:
                 case_id = uuid.UUID(str(payload_case))
             else:
                 case_id = await self._tools.read_open_cases(event.student_id)
+
+        # R3: when an attendance route resolved a case and a proposal
+        # specialist is wired, attempt plan production (06 §2; §10.2 agent
+        # rows). Intervention routes stay route-only until their specialist
+        # exists. The specialist refuses cleanly on conflict/outage/undecided
+        # proposal — routing already stands, case state unchanged (06 §6).
+        if (
+            self._proposal is not None
+            and case_id is not None
+            and target_agent == ATTENDANCE_AGENT
+        ):
+            outcome = await self._proposal.produce_proposal(
+                student_id=event.student_id, case_id=case_id
+            )
+            reasons.extend(outcome.reason_codes)
+            if not outcome.proposed and outcome.refusal_code == "DATA_CONFLICT_QUARANTINE":
+                # 06 §0 rule 3: never bypass a conflict quarantine.
+                return self._escalate(event, [outcome.refusal_code])
+            if not outcome.proposed and outcome.refusal_code:
+                # Soft refusal: routing stands, traceable refusal code kept.
+                reasons.append(outcome.refusal_code)
 
         evidence: dict[str, str | None] = {
             "event_type": event.event_type,

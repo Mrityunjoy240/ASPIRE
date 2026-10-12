@@ -19,10 +19,15 @@ from app.services.llm_service import get_llm_service
 
 
 def build_supervisor(llm_service) -> Supervisor:
-    """Default Supervisor wiring: service-backed tools + attendance stub."""
+    """Default Supervisor wiring: service-backed tools + attendance
+    specialist (R2 assess stub + R3 proposal production)."""
     tools = ServiceBackedTools()
     specialist = AttendanceSpecialist(tools=tools, llm=llm_service)
-    return Supervisor(tools=tools, attendance_specialist=specialist)
+    return Supervisor(
+        tools=tools,
+        attendance_specialist=specialist,
+        proposal_specialist=specialist,
+    )
 
 
 @asynccontextmanager

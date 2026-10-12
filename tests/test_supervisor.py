@@ -40,7 +40,12 @@ from app.agents.supervisor import (
     initial_urgency_band,
 )
 from app.core.events import DomainEvent, EventBus
-from app.services.llm_service import LLMRetryExhausted, get_llm_service
+from app.services.llm_service import (
+    InMemoryLLMAuditSink,
+    LLMRetryExhausted,
+    LLMService,
+    get_llm_service,
+)
 
 AGENTS_DIR = Path(__file__).resolve().parents[1] / "app" / "agents"
 
@@ -286,7 +291,7 @@ def mock_llm(monkeypatch):
             llm_timeout=1.0,
         ),
     )
-    service = get_llm_service()  # deterministic MOCK client, no network
+    service = get_llm_service(audit_sink=InMemoryLLMAuditSink())  # MOCK, no network/DB
     yield service
     llm_module._llm_service = previous
 
@@ -341,12 +346,33 @@ async def test_specialist_llm_unavailable_degrades_gracefully(mock_llm):
     class BrokenLLM:
         mode = "mock"
 
-        async def complete(self, messages, response_model=None):
+        async def complete(self, messages, response_model=None, **kwargs):
             raise LLMRetryExhausted("provider down")
 
     specialist = AttendanceSpecialist(tools=FakeTools(), llm=BrokenLLM())
     result = await specialist.assess(uuid.uuid4())
     assert result.available is False
+
+
+async def test_specialist_audit_failure_is_unavailable(mock_llm):
+    """06 §5 fail-closed: when the attempt audit row cannot be persisted
+    (pre-dispatch begin fails) the explanation is unavailable — no
+    unrecorded LLM output is consumed."""
+
+    class ExplodingBeginSink:
+        async def begin(self, start):
+            raise RuntimeError("audit store offline")
+
+        async def finish(self, attempt):
+            raise AssertionError("finish must not run when begin failed")
+
+    broken_service = LLMService(
+        audit_sink=ExplodingBeginSink(), client=mock_llm.mock_client
+    )
+    specialist = AttendanceSpecialist(tools=FakeTools(), llm=broken_service)
+    result = await specialist.assess(uuid.uuid4())
+    assert result.available is False
+    assert result.explanation is None
 
 
 async def test_supervisor_routing_survives_specialist_llm_outage(mock_llm):
@@ -355,7 +381,7 @@ async def test_supervisor_routing_survives_specialist_llm_outage(mock_llm):
     class BrokenLLM:
         mode = "mock"
 
-        async def complete(self, messages, response_model=None):
+        async def complete(self, messages, response_model=None, **kwargs):
             raise LLMRetryExhausted("provider down")
 
     tools = FakeTools()

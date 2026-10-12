@@ -14,6 +14,7 @@ from app.models.conflicts import DataConflict
 from app.models.institutions import Institution
 from app.models.intervention import InterventionCase, InterventionCaseStatus, InterventionPlan
 from app.models.learning import DocumentChunk, LearningDocument
+from app.models.llm_audit import LLMAttemptAudit
 from app.models.rules import InstitutionRule
 from app.models.student import StudentProfile
 from app.models.tasks import StudentTask, TaskSourceType, TaskStatus
@@ -38,6 +39,7 @@ __all__ = [
     "AssessmentComponentType",
     "AssessmentSubmissionStatus",
     "AuditLog",
+    "LLMAttemptAudit",
     "StudentTask",
     "TaskSourceType",
     "TaskStatus",

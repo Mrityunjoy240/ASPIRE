@@ -226,9 +226,12 @@ version                INT NOT NULL DEFAULT 1
 
 ---
 
-## 7. Audit & Provenance Table
+## 7. Audit & Provenance Tables
 
-Every privileged write in the entire system produces one of these rows.
+Every privileged write in the entire system produces an `audit_log` row; every
+LLM attempt produces an `llm_attempt_audit` row (separate table — an LLM
+attempt has no business entity to reference, and `audit_log.entity_table`/
+`entity_id` are NOT NULL).
 
 ### `audit_log`
 ```sql
@@ -242,6 +245,47 @@ previous_state   JSONB
 new_state        JSONB
 source_system    TEXT NOT NULL               -- CSV_IMPORT | MENTOR_WEB | RULE_ENGINE | AGENT | STUDENT_APP
 created_at       TIMESTAMPTZ NOT NULL
+```
+
+### `llm_attempt_audit`
+Per-attempt LLM gateway metadata (06 §5, 07 §4, DM-LLM01). Metadata only —
+never prompt content, never student PII. One durable row per actual dispatch
+attempt (LIVE: every HTTP attempt including the single bounded retry gets its
+own row; MOCK: one row per `LLMService.complete()` call), with an explicit
+two-step lifecycle:
+
+1. **Begin (before dispatch):** the row is committed with
+   `outcome = 'IN_PROGRESS'` *before* the provider is called. If this cannot
+   be committed, the provider is **not called** and the request fails with
+   `LLMAuditError` (no automatic retries of audit writes).
+2. **Finish (after the attempt):** the terminal outcome, `failure_reason`,
+   `latency_ms` and actual provider token usage are committed on the same
+   row. If this cannot be committed, the result is **never returned or
+   consumed** (controlled `LLMAuditError` → caller refuses) and the
+   pre-committed `IN_PROGRESS` row remains discoverable.
+
+**`IN_PROGRESS` semantics:** the attempt was initiated but its terminal
+outcome is not durably known (e.g. a process crash between the begin commit
+and receiving/recording the provider response). `IN_PROGRESS` is never
+treated as success.
+
+```sql
+id                      UUID PRIMARY KEY      -- client-generated uuid4 per attempt row
+request_id              UUID NOT NULL       -- one id per complete() call; its attempt rows share it
+caller_agent            TEXT NOT NULL       -- e.g., 'attendance_specialist'
+prompt_version          TEXT                -- caller-supplied prompt version; NULL when the caller has none
+response_schema_version TEXT                -- response model class name; NULL for unstructured replies
+provider                TEXT NOT NULL       -- openrouter | mock
+model                   TEXT NOT NULL       -- configured model; 'mock-fixture' in MOCK (no model invoked)
+attempt                 INT NOT NULL        -- 1-based attempt within the request (1..2 with one bounded retry)
+outcome                 TEXT NOT NULL       -- IN_PROGRESS | SUCCESS | SCHEMA_REJECTED | PROVIDER_FAILURE |
+                                            --   RETRY_EXHAUSTED
+failure_reason          TEXT                -- timeout | rate_limit | http_error | network_error |
+                                            --   invalid_structured_output; NULL on success and while IN_PROGRESS
+latency_ms              INT NOT NULL        -- per-attempt wall time; 0 while IN_PROGRESS
+input_token_count       INT                 -- provider usage.prompt_tokens; NULL when unreported (MOCK: always NULL)
+output_token_count      INT                 -- provider usage.completion_tokens; NULL likewise
+created_at              TIMESTAMPTZ NOT NULL  -- attempt initiation time (set at begin, never rewritten)
 ```
 
 ---
