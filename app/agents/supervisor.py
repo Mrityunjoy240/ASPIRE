@@ -285,14 +285,19 @@ class Supervisor:
 
         # R3: when an attendance route resolved a case and a proposal
         # specialist is wired, attempt plan production (06 §2; §10.2 agent
-        # rows). Intervention routes stay route-only until their specialist
-        # exists. The specialist refuses cleanly on conflict/outage/undecided
-        # proposal — routing already stands, case state unchanged (06 §6).
-        if (
-            self._proposal is not None
-            and case_id is not None
-            and target_agent == ATTENDANCE_AGENT
-        ):
+        # rows). R5: the PLAN_DECLINED route (case now REPLAN_REQUIRED,
+        # §10.2 student rows) also invokes the specialist so the agent can
+        # propose a new plan (§10.2 REPLAN_REQUIRED → PLAN_PROPOSED). The
+        # specialist refuses cleanly on conflict/outage/undecided proposal/
+        # EC-AG-05 stop — routing already stands, case state unchanged (06 §6).
+        proposal_route = (
+            target_agent == ATTENDANCE_AGENT
+            or (
+                target_agent == INTERVENTION_AGENT
+                and event.event_type == EVENT_PLAN_DECLINED
+            )
+        )
+        if self._proposal is not None and case_id is not None and proposal_route:
             outcome = await self._proposal.produce_proposal(
                 student_id=event.student_id, case_id=case_id
             )

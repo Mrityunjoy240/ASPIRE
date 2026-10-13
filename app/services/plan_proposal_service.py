@@ -32,6 +32,13 @@ PLAN_STATUS_PROPOSED = "PROPOSED"
 CREATED_BY_SYSTEM_AGENT = "SYSTEM_AGENT"
 AUDIT_ACTION_PLAN_PROPOSED = "PLAN_PROPOSED"
 
+# 09 EC-AG-05: after 3 consecutive student declines the system stops
+# auto-generating new plans ("Student not engaging with AI guidance").
+# Only student declines count; an acceptance/customization (or any plan
+# without a student decline) breaks the streak.
+MAX_CONSECUTIVE_STUDENT_DECLINES = 3
+_STUDENT_DECLINE_DECISION = "DECLINED"
+
 # 03 §10.2 agent rows: exactly these two source states may transition via
 # an agent proposal. Any other state is refused (no actor may perform a
 # transition not listed in the table).
@@ -78,8 +85,10 @@ async def propose_intervention_plan(
        UNDECIDED_PROPOSAL_EXISTS (an active proposal is never silently
        replaced or duplicated; replan appends only after the prior plan was
        decided).
-    3. Non-empty reason_codes / plan_actions — else INVALID_REQUEST.
-    4. Evidence re-validated at the persistence boundary (DEC-01 contract:
+    3. Fewer than MAX_CONSECUTIVE_STUDENT_DECLINES trailing consecutive
+       student declines — else TOO_MANY_DECLINES (09 EC-AG-05).
+    4. Non-empty reason_codes / plan_actions — else INVALID_REQUEST.
+    5. Evidence re-validated at the persistence boundary (DEC-01 contract:
        canonical entries, unique UUID ids, typed scalars, verified
        provenance) — malformed input refuses with INVALID_EVIDENCE.
 
@@ -109,6 +118,18 @@ async def propose_intervention_plan(
                 f"Case {case.id} already has {len(undecided)} undecided PROPOSED "
                 "plan(s); a new proposal is refused until the student decides "
                 "(F-01-style ambiguity refusal)"
+            ),
+        )
+
+    declines = _trailing_consecutive_student_declines(existing_plans)
+    if declines >= MAX_CONSECUTIVE_STUDENT_DECLINES:
+        raise PlanProposalError(
+            "TOO_MANY_DECLINES",
+            (
+                f"Case {case.id} has {declines} consecutive student-declined "
+                f"plan(s); auto-generation stops after "
+                f"{MAX_CONSECUTIVE_STUDENT_DECLINES} (09 EC-AG-05 — student "
+                "not engaging with AI guidance; the mentor takes over)"
             ),
         )
 
@@ -173,6 +194,29 @@ async def propose_intervention_plan(
         case_status=InterventionCaseStatus.PLAN_PROPOSED.value,
         plan_status=PLAN_STATUS_PROPOSED,
     )
+
+
+def _trailing_consecutive_student_declines(
+    plans: Sequence[InterventionPlan],
+) -> int:
+    """Count the newest-first run of student-declined plans (09 EC-AG-05).
+
+    Ordering is created_at DESC (newest first); a plan without a student
+    DECLINED decision (pending, accepted, customized, or agent-authored
+    history without a student verdict) ends the streak.
+    """
+    ordered = sorted(
+        plans,
+        key=lambda p: (p.created_at is not None, p.created_at),
+        reverse=True,
+    )
+    count = 0
+    for plan in ordered:
+        if plan.student_decision == _STUDENT_DECLINE_DECISION:
+            count += 1
+        else:
+            break
+    return count
 
 
 def _status_value(status: object) -> str:

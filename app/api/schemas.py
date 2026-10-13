@@ -199,3 +199,75 @@ class StudentDecisionResponse(BaseModel):
     case_id: UUID
     student_decision: str
     decided_at: datetime
+
+
+class CaseEscalateRequest(BaseModel):
+    """Mentor escalation of an ESCALATION_REQUIRED case (03 §10.2
+    self-transition; 02 §2.2 Steps 3-5).
+
+    The frozen transition table names exactly HOD/CT as targets. The note
+    is optional mentor-authored text (02 §2.2 Step 3), length-capped here
+    and recorded only on the CASE_ESCALATED audit row — no case column
+    exists for it (05 §9).
+    """
+    target: Literal["HOD", "CT"]
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class CaseEscalateResponse(BaseModel):
+    case_id: UUID
+    case_status: str
+    escalated_to: str
+    acted_at: datetime
+
+
+class CaseCloseResponse(BaseModel):
+    """Mentor closure of a RESOLVED case (03 §10.2 RESOLVED → CLOSED)."""
+    case_id: UUID
+    case_status: str
+    closed_at: datetime
+
+
+# --- Follow-up Schemas (ADR-004 §2.7) ---
+
+class FollowUpCreateRequest(BaseModel):
+    """Mentor schedules a follow-up on an ACTIVE case (02 §2.1 Steps 5-6,
+    06 §4 schedule_followup; ADR-004 §2.7).
+
+    `due_at` is required IFF trigger_type=CUSTOM_DATE (mentor custom date,
+    must be timezone-aware and future); event-driven types are fulfilled by
+    their policy trigger events and forbid `due_at`.
+    """
+    trigger_type: Literal[
+        "ATTENDANCE_INTERVENTION",
+        "STUDY_INTERVENTION",
+        "ASSIGNMENT_INTERVENTION",
+        "CUSTOM_DATE",
+    ]
+    due_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def _check_due_at(self) -> "FollowUpCreateRequest":
+        if self.trigger_type == "CUSTOM_DATE":
+            if self.due_at is None:
+                raise ValueError("CUSTOM_DATE follow-ups require due_at")
+            if self.due_at.tzinfo is None:
+                raise ValueError("due_at must be timezone-aware")
+        elif self.due_at is not None:
+            raise ValueError("due_at is only valid for CUSTOM_DATE follow-ups")
+        return self
+
+
+class FollowUpResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    case_id: UUID
+    trigger_type: str
+    status: str
+    due_at: datetime | None
+    created_at: datetime
+
+
+class FollowUpCreateResponse(FollowUpResponse):
+    """201 body for POST /cases/{case_id}/follow-ups."""

@@ -564,6 +564,7 @@ def test_lifespan_registers_supervisor_once_across_restarts():
     from fastapi.testclient import TestClient
 
     from app.main import app
+    from app.services.follow_up_service import FollowUpConsumer
 
     with TestClient(app):
         pass
@@ -572,5 +573,13 @@ def test_lifespan_registers_supervisor_once_across_restarts():
 
     bus = app.state.event_bus
     assert bus.subscriber_count(EVENT_ATTENDANCE_RISK_WARNING) == 1
-    assert bus.subscriber_count(EVENT_TASK_OVERDUE) == 1
+    # MENTOR_FOLLOWUP_DUE and TASK_OVERDUE have two legitimate subscribers
+    # (Supervisor routing per 06 §1 + FollowUpConsumer per 06 §4/ADR-004);
+    # restarts must not grow any count.
+    assert bus.subscriber_count(EVENT_TASK_OVERDUE) == 2
+    assert bus.subscriber_count(EVENT_MENTOR_FOLLOWUP_DUE) == 2
+    for event_type in FollowUpConsumer.SUBSCRIBED_EVENTS:
+        expected = 2 if event_type in (EVENT_TASK_OVERDUE, EVENT_MENTOR_FOLLOWUP_DUE) else 1
+        assert bus.subscriber_count(event_type) == expected, event_type
     assert app.state.supervisor is not None
+    assert app.state.follow_up_consumer is not None

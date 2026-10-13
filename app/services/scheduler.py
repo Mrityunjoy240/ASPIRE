@@ -42,7 +42,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import settings
 from app.core.database import async_session_maker
 from app.core.events import DomainEvent, EventBus
-from app.models.enums import TaskStatus
+from app.models.enums import FollowUpStatus, TaskStatus
+from app.models.intervention import InterventionCase, InterventionFollowUp
 from app.models.scheduler import SchedulerOccurrence
 from app.models.tasks import StudentTask
 
@@ -51,33 +52,28 @@ logger = logging.getLogger(__name__)
 # 03 §8.3: one evaluation at startup, then every 5 minutes.
 SCHEDULER_INTERVAL_SECONDS = 300
 
-# Producer-side constant (case_service precedent): the canonical catalog
-# name from 03 §8.1; tests assert it matches the Supervisor's constant.
+# Producer-side constants (case_service precedent): canonical catalog names
+# from 03 §8.1; tests assert they match the Supervisor's / consumer's.
 EVENT_TASK_OVERDUE = "TASK_OVERDUE"
+EVENT_MENTOR_FOLLOWUP_DUE = "MENTOR_FOLLOWUP_DUE"
 
 # 05 §7 scheduler_occurrences.state vocabulary.
 STATE_CLAIMED = "CLAIMED"
 STATE_EMITTED = "EMITTED"
 
-# Conditions R4 deferred at the contract gate (documented blockers — do not
-# silently evaluate them without their approved sources):
-#   EXAM_APPROACHING   — no calendar/exam persistence exists (03 §9 Calendar
-#                        Engine); exam_approaching_days has no seed row and
-#                        rule precedence/effective dating is open in ADR-003
-#                        §6.4 (lead-held).
-#   MENTOR_FOLLOWUP_DUE — no persisted follow-up due-date; schedule_followup
-#                        (06 §4) is unimplemented and the approved follow-up
-#                        policy (06 §4, 02 Step 6) is event-driven, not
-#                        time-based.
+# Conditions still deferred at the contract gate (documented blockers — do
+# not silently evaluate them without their approved sources):
+#   EXAM_APPROACHING — no calendar/exam persistence exists (03 §9 Calendar
+#                      Engine); exam_approaching_days has no seed row and
+#                      rule precedence/effective dating is open in ADR-003
+#                      §6.4 (lead-held).
+# MENTOR_FOLLOWUP_DUE is NO LONGER deferred: ADR-004 (lead option C,
+# 13 Oct 2026) landed the intervention_follow_ups persistence model
+# (migration 016) and the MentorFollowupDueCondition below.
 DEFERRED_CONDITIONS: dict[str, str] = {
     "EXAM_APPROACHING": (
         "no calendar/exam persistence (03 §9); threshold seed and ADR-003 §6.4 "
         "rule precedence unresolved — deferred at the R4 contract gate"
-    ),
-    "MENTOR_FOLLOWUP_DUE": (
-        "no persisted follow-up due-date; schedule_followup (06 §4) "
-        "unimplemented; approved policy is event-driven — deferred at the R4 "
-        "contract gate"
     ),
 }
 
@@ -143,7 +139,95 @@ class TaskOverdueCondition:
         return triggers
 
 
-DEFAULT_CONDITIONS: tuple[TimeCondition, ...] = (TaskOverdueCondition(),)
+# ADR-004 §2.3: EXPIRY reuses MENTOR_FOLLOWUP_DUE with a distinct phase and
+# trigger_value (evaluation_window_ends_at ≠ due_at), so scheduler_occurrences
+# idempotency still yields one logical emission per phase. The consumer
+# (follow_up_service) treats the payload phase as advisory — row status rules.
+PHASE_DUE = "DUE"
+PHASE_EXPIRY = "EXPIRY"
+
+
+class MentorFollowupDueCondition:
+    """03 §8.2/§8.3 MENTOR_FOLLOWUP_DUE (unblocked by ADR-004, lead option C).
+
+    Two time conditions on intervention_follow_ups (05 §9, migration 016):
+      DUE    — status SCHEDULED AND due_at <= now (CUSTOM_DATE follow-ups;
+               event-driven types have NULL due_at and never fire here).
+      EXPIRY — status FULFILLED AND evaluation_window_ends_at <= now
+               (drives the MONITORING re-check: RESOLVED or REPLAN_REQUIRED).
+
+    The scheduler never mutates follow-up/case rows — it emits only; the
+    deterministic FollowUpConsumer performs the §10.2 transitions.
+    """
+
+    event_type = EVENT_MENTOR_FOLLOWUP_DUE
+
+    async def candidates(self, session: AsyncSession, now: datetime) -> Sequence[TimeTrigger]:
+        due_rows = await session.execute(
+            select(InterventionFollowUp, InterventionCase.student_id)
+            .join(InterventionCase, InterventionCase.id == InterventionFollowUp.case_id)
+            .where(
+                InterventionFollowUp.status == FollowUpStatus.SCHEDULED.value,
+                InterventionFollowUp.due_at.is_not(None),
+                InterventionFollowUp.due_at <= now,
+            )
+            .order_by(InterventionFollowUp.due_at, InterventionFollowUp.id)
+        )
+        triggers: list[TimeTrigger] = []
+        for follow_up, student_id in due_rows:
+            due_at = follow_up.due_at
+            if due_at is None:  # filtered above; kept for type narrowing
+                continue
+            triggers.append(
+                TimeTrigger(
+                    event_type=EVENT_MENTOR_FOLLOWUP_DUE,
+                    student_id=student_id,
+                    source_id=follow_up.id,
+                    trigger_value=due_at,
+                    payload={
+                        "case_id": str(follow_up.case_id),
+                        "follow_up_id": str(follow_up.id),
+                        "trigger_type": follow_up.trigger_type,
+                        "phase": PHASE_DUE,
+                    },
+                )
+            )
+
+        expiry_rows = await session.execute(
+            select(InterventionFollowUp, InterventionCase.student_id)
+            .join(InterventionCase, InterventionCase.id == InterventionFollowUp.case_id)
+            .where(
+                InterventionFollowUp.status == FollowUpStatus.FULFILLED.value,
+                InterventionFollowUp.evaluation_window_ends_at.is_not(None),
+                InterventionFollowUp.evaluation_window_ends_at <= now,
+            )
+            .order_by(InterventionFollowUp.evaluation_window_ends_at, InterventionFollowUp.id)
+        )
+        for follow_up, student_id in expiry_rows:
+            window_end = follow_up.evaluation_window_ends_at
+            if window_end is None:  # filtered above; kept for type narrowing
+                continue
+            triggers.append(
+                TimeTrigger(
+                    event_type=EVENT_MENTOR_FOLLOWUP_DUE,
+                    student_id=student_id,
+                    source_id=follow_up.id,
+                    trigger_value=window_end,
+                    payload={
+                        "case_id": str(follow_up.case_id),
+                        "follow_up_id": str(follow_up.id),
+                        "trigger_type": follow_up.trigger_type,
+                        "phase": PHASE_EXPIRY,
+                    },
+                )
+            )
+        return triggers
+
+
+DEFAULT_CONDITIONS: tuple[TimeCondition, ...] = (
+    TaskOverdueCondition(),
+    MentorFollowupDueCondition(),
+)
 
 
 @dataclass(frozen=True, slots=True)

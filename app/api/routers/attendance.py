@@ -150,58 +150,11 @@ async def get_attendance_what_if(
 # --- Helper functions ---
 
 async def _get_attendance_threshold(session: AsyncSession, student_id: UUID) -> Decimal:
-    """Fetch attendance threshold from institution_rules."""
-    from app.models.academic import Batch
-    from app.models.rules import InstitutionRule
-    from app.models.student import StudentProfile
+    """Institution `attendance_threshold` via the shared rules reader
+    (app/services/rules_reader.py) — one resolver, no duplicated query logic."""
+    from app.services.rules_reader import get_attendance_threshold
 
-    # Student -> institution ownership goes through the batch (003: batches
-    # carry institution_id; 004: student_profiles carry batch_id only — the
-    # profile has NO institution_id column).
-    result = await session.execute(
-        select(Batch.institution_id, Batch.id)
-        .join(StudentProfile, StudentProfile.batch_id == Batch.id)
-        .where(StudentProfile.id == student_id)
-    )
-    row = result.first()
-    if not row:
-        return Decimal("75.00")
-    
-    institution_id, batch_id = row
-    
-    # Check institution-level rule
-    result = await session.execute(
-        select(InstitutionRule.value)
-        .where(
-            InstitutionRule.institution_id == institution_id,
-            InstitutionRule.rule_id == "attendance_threshold",
-            InstitutionRule.scope_level == "INSTITUTION",
-            InstitutionRule.status == "ACTIVE",
-        )
-        .order_by(InstitutionRule.version.desc())
-    )
-    rule = result.scalar_one_or_none()
-    if rule and isinstance(rule, dict) and "threshold" in rule:
-        return Decimal(str(rule["threshold"]))
-    
-    # Check batch-level rule
-    if batch_id:
-        result = await session.execute(
-            select(InstitutionRule.value)
-            .where(
-                InstitutionRule.institution_id == institution_id,
-                InstitutionRule.rule_id == "attendance_threshold",
-                InstitutionRule.scope_level == "BATCH",
-                InstitutionRule.scope_id == batch_id,
-                InstitutionRule.status == "ACTIVE",
-            )
-            .order_by(InstitutionRule.version.desc())
-        )
-        rule = result.scalar_one_or_none()
-        if rule and isinstance(rule, dict) and "threshold" in rule:
-            return Decimal(str(rule["threshold"]))
-    
-    return Decimal("75.00")  # Default fallback
+    return await get_attendance_threshold(session, student_id)
 
 
 def _derived_to_state(derived, course_run):

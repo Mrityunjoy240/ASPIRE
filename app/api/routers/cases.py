@@ -19,17 +19,29 @@ from app.api.schemas import (
     CaseQueueItemResponse,
     CaseApproveRequest,
     CaseApproveResponse,
+    CaseCloseResponse,
+    CaseEscalateRequest,
+    CaseEscalateResponse,
+    FollowUpCreateRequest,
+    FollowUpCreateResponse,
+    FollowUpResponse,
     StudentDecisionRequest,
     StudentDecisionResponse,
 )
 from app.core.events import EventBus
 from app.models.academic import Batch
-from app.models.intervention import InterventionCase, InterventionPlan
+from app.models.intervention import InterventionCase, InterventionFollowUp, InterventionPlan
 from app.models.student import StudentProfile
 from app.models.tasks import StudentTask
 from app.models.users import User
 from app.models.enums import InterventionCaseStatus, UserRole
 from app.services.case_service import CaseApprovalError, approve_plan
+from app.services.case_lifecycle_service import (
+    CaseLifecycleError,
+    close_case,
+    escalate_case,
+)
+from app.services.follow_up_service import FollowUpError, schedule_followup
 from app.services.student_action_service import StudentActionError, decide_plan
 from app.engines.priority import PriorityEngine, QueueEntry
 
@@ -52,7 +64,9 @@ async def get_mentor_queue(
     # Mentors see only their assigned cases. Admin (all cases) and HOD are
     # scoped to their own institution (07 §2: Admin = all WITHIN own
     # institution; student->institution resolves through batch_id — 003/004).
-    # A NULL institution_id matches nothing (fail closed).
+    # ESCALATION_REQUIRED is included (02 §2.1/§2.2: the mentor sees the
+    # escalation flag and HOD reviews escalated cases). A NULL
+    # institution_id matches nothing (fail closed).
     if auth.is_admin() or auth.has_role(UserRole.HOD):
         result = await session.execute(
             select(InterventionCase)
@@ -68,6 +82,7 @@ async def get_mentor_queue(
                 InterventionCaseStatus.ACTIVE,
                 InterventionCaseStatus.MONITORING,
                 InterventionCaseStatus.REPLAN_REQUIRED,
+                InterventionCaseStatus.ESCALATION_REQUIRED,
             ]))
         )
     else:
@@ -84,6 +99,7 @@ async def get_mentor_queue(
                     InterventionCaseStatus.ACTIVE,
                     InterventionCaseStatus.MONITORING,
                     InterventionCaseStatus.REPLAN_REQUIRED,
+                    InterventionCaseStatus.ESCALATION_REQUIRED,
                 ])
             )
         )
@@ -182,6 +198,33 @@ def _plans_for_case_query(case_id: UUID):
     )
 
 
+async def _authorize_mentor_case_write(
+    auth, session: AsyncSession, case: InterventionCase
+) -> None:
+    """Record-level authorization for a mentor case write (07 §2): the
+    assigned mentor always qualifies; admin/HOD qualify only inside their
+    own institution (student -> batch -> institution). Every refusal uses
+    the same detail (no scope oracle). Shared by approve/close/escalate."""
+    if case.mentor_id == auth.user_id:
+        return
+    if not (auth.is_admin() or auth.has_role(UserRole.HOD)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this case",
+        )
+    result = await session.execute(
+        select(Batch.institution_id)
+        .join(StudentProfile, StudentProfile.batch_id == Batch.id)
+        .where(StudentProfile.id == case.student_id)
+    )
+    case_institution_id = result.scalar_one_or_none()
+    if case_institution_id is None or case_institution_id != auth.institution_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this case",
+        )
+
+
 @router.post(
     "/{case_id}/approve",
     response_model=CaseApproveResponse,
@@ -215,26 +258,8 @@ async def approve_case(
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
 
-    # Record-level authorization (07 §2): the assigned mentor always qualifies;
-    # admin/HOD qualify only inside their own institution (student -> batch ->
-    # institution). Every refusal uses the same detail (no scope oracle).
-    if case.mentor_id != auth.user_id:
-        if not (auth.is_admin() or auth.has_role(UserRole.HOD)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized for this case",
-            )
-        result = await session.execute(
-            select(Batch.institution_id)
-            .join(StudentProfile, StudentProfile.batch_id == Batch.id)
-            .where(StudentProfile.id == case.student_id)
-        )
-        case_institution_id = result.scalar_one_or_none()
-        if case_institution_id is None or case_institution_id != auth.institution_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized for this case",
-            )
+    # Record-level authorization (07 §2) — shared helper (no scope oracle).
+    await _authorize_mentor_case_write(auth, session, case)
 
     result = await session.execute(_plans_for_case_query(case_id))
     plans = list(result.scalars().all())
@@ -342,6 +367,205 @@ async def student_plan_decision(
         student_decision=decision.student_decision,
         decided_at=decision.decided_at,
     )
+
+
+@router.post(
+    "/{case_id}/escalate",
+    response_model=CaseEscalateResponse,
+    summary="Mentor escalates an ESCALATION_REQUIRED case to HOD/CT",
+    dependencies=[Depends(require_mentor_or_admin)],
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Case not in ESCALATION_REQUIRED (03_SYSTEM_SPEC §10.2 "
+                "self-transition)"
+            ),
+        },
+        status.HTTP_400_BAD_REQUEST: {"description": "Unknown escalation target"},
+        status.HTTP_403_FORBIDDEN: {"description": "Not authorized for this case"},
+    },
+)
+async def escalate_case_endpoint(
+    case_id: UUID,
+    request: CaseEscalateRequest,
+    auth = Depends(get_auth_context),
+    session = Depends(get_session),
+):
+    """Mentor escalates to HOD/CT — stays ESCALATION_REQUIRED (pending
+    HOD/CT). Target selection + optional note land on the mandatory
+    CASE_ESCALATED audit row (07 §4); no domain event exists in the
+    catalog (03 §8.2). The frozen table names exactly HOD/CT (03 §10.2).
+    """
+    result = await session.execute(_case_row_for_update(case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    await _authorize_mentor_case_write(auth, session, case)
+
+    try:
+        escalation = await escalate_case(
+            session,
+            case=case,
+            actor_id=auth.user_id,
+            target=request.target,
+            note=request.note,
+        )
+    except CaseLifecycleError as exc:
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code == "ILLEGAL_TRANSITION"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
+
+    return CaseEscalateResponse(
+        case_id=escalation.case_id,
+        case_status=escalation.case_status,
+        escalated_to=escalation.escalated_to or request.target,
+        acted_at=escalation.acted_at,
+    )
+
+
+@router.post(
+    "/{case_id}/close",
+    response_model=CaseCloseResponse,
+    summary="Mentor closes a RESOLVED case",
+    dependencies=[Depends(require_mentor_or_admin)],
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": (
+                "Case not in RESOLVED (03_SYSTEM_SPEC §10.2 RESOLVED → CLOSED)"
+            ),
+        },
+        status.HTTP_403_FORBIDDEN: {"description": "Not authorized for this case"},
+    },
+)
+async def close_case_endpoint(
+    case_id: UUID,
+    auth = Depends(get_auth_context),
+    session = Depends(get_session),
+):
+    """Mentor closes a resolved case: RESOLVED → CLOSED + closed_at, with
+    the mandatory CASE_CLOSED audit row (07 §4). Audit-only — the catalog
+    (03 §8.2) has no case-closed domain event (same precedent as a mentor
+    plan rejection).
+    """
+    result = await session.execute(_case_row_for_update(case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    await _authorize_mentor_case_write(auth, session, case)
+
+    try:
+        closure = await close_case(
+            session,
+            case=case,
+            actor_id=auth.user_id,
+        )
+    except CaseLifecycleError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=exc.detail
+        ) from exc
+
+    return CaseCloseResponse(
+        case_id=closure.case_id,
+        case_status=closure.case_status,
+        closed_at=closure.acted_at,
+    )
+
+
+@router.post(
+    "/{case_id}/follow-ups",
+    response_model=FollowUpCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Mentor schedules a follow-up on an ACTIVE case",
+    dependencies=[Depends(require_mentor_or_admin)],
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "description": "Case not in ACTIVE (ADR-004 §2.7)",
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Invalid trigger_type/due_at combination (ADR-004 §2.7)",
+        },
+        status.HTTP_403_FORBIDDEN: {"description": "Not authorized for this case"},
+    },
+)
+async def create_follow_up(
+    case_id: UUID,
+    request: FollowUpCreateRequest,
+    auth = Depends(get_auth_context),
+    session = Depends(get_session),
+):
+    """Mentor schedules a follow-up: ACTIVE case only (03 §10.2,
+    ADR-004 §2.7). `CUSTOM_DATE` requires a future timezone-aware `due_at`;
+    event-driven types (`ATTENDANCE_INTERVENTION`, `STUDY_INTERVENTION`,
+    `ASSIGNMENT_INTERVENTION`) are fulfilled by their policy trigger events
+    and forbid `due_at`. Persists an `intervention_follow_ups` SCHEDULED row
+    plus the mandatory FOLLOW_UP_SCHEDULED audit row (ADR-004 §2.8).
+    """
+    result = await session.execute(_case_row_for_update(case_id))
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    await _authorize_mentor_case_write(auth, session, case)
+
+    try:
+        follow_up = await schedule_followup(
+            session,
+            case=case,
+            trigger_type=request.trigger_type,
+            due_at=request.due_at,
+            actor_id=auth.user_id,
+        )
+    except FollowUpError as exc:
+        code = (
+            status.HTTP_409_CONFLICT
+            if exc.code == "ILLEGAL_TRANSITION"
+            else status.HTTP_400_BAD_REQUEST
+        )
+        raise HTTPException(status_code=code, detail=exc.detail) from exc
+
+    return FollowUpCreateResponse(
+        id=follow_up.follow_up_id,
+        case_id=follow_up.case_id,
+        trigger_type=follow_up.trigger_type,
+        status=follow_up.status,
+        due_at=follow_up.due_at,
+        created_at=follow_up.created_at,
+    )
+
+
+@router.get(
+    "/{case_id}/follow-ups",
+    response_model=list[FollowUpResponse],
+    summary="List follow-ups for a case",
+    dependencies=[Depends(require_mentor_or_admin)],
+)
+async def list_follow_ups(
+    case_id: UUID,
+    auth = Depends(get_auth_context),
+    session = Depends(get_session),
+):
+    """Read-only list of a case's follow-ups (newest first). Same
+    record-level authorization as the write path (07 §2)."""
+    result = await session.execute(
+        select(InterventionCase).where(InterventionCase.id == case_id)
+    )
+    case = result.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
+
+    await _authorize_mentor_case_write(auth, session, case)
+
+    rows = await session.execute(
+        select(InterventionFollowUp)
+        .where(InterventionFollowUp.case_id == case_id)
+        .order_by(InterventionFollowUp.created_at.desc())
+    )
+    return list(rows.scalars().all())
 
 
 # --- Helper ---

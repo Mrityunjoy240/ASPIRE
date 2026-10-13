@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import InterventionCaseStatus
+from app.models.enums import FollowUpStatus, FollowUpTriggerType, InterventionCaseStatus
 
 
 class InterventionCase(Base):
@@ -82,3 +82,52 @@ class InterventionPlan(Base):
         Index("idx_intervention_plans_case", "case_id"),
         Index("idx_intervention_plans_status", "status"),
     )
+
+
+class InterventionFollowUp(Base):
+    """Follow-up row (migration 016, ADR-004 / 05 §9).
+
+    Lifecycle SCHEDULED → FULFILLED → EVALUATED; the status flip under
+    SELECT ... FOR UPDATE is the durable consumer-side dedup. due_at is
+    CUSTOM_DATE only; event-driven types carry NULL and are fulfilled by
+    their policy trigger events (02 §2.1 Step 6).
+    """
+
+    __tablename__ = "intervention_follow_ups"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    case_id: Mapped[UUID] = mapped_column(
+        ForeignKey("intervention_cases.id", ondelete="RESTRICT"), nullable=False
+    )
+    trigger_type: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # FollowUpTriggerType values (06 §4 policies + CUSTOM_DATE)
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, default=FollowUpStatus.SCHEDULED.value
+    )
+    due_at: Mapped[datetime | None] = mapped_column(nullable=True)  # CUSTOM_DATE only
+    triggered_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    evaluation_window_ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    evaluated_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)  # RESOLVED | REPLAN_REQUIRED
+    created_by: Mapped[str] = mapped_column(Text, nullable=False)  # 'SYSTEM' or user UUID
+    created_at: Mapped[datetime] = mapped_column(nullable=False)
+
+    case: Mapped["InterventionCase"] = relationship()
+
+    __table_args__ = (
+        Index("idx_intervention_follow_ups_case", "case_id"),
+        Index("idx_intervention_follow_ups_status", "status"),
+        Index("idx_intervention_follow_ups_due", "status", "due_at"),
+        Index("idx_intervention_follow_ups_window", "status", "evaluation_window_ends_at"),
+    )
+
+
+# Re-export for convenience at call sites that import the model module.
+__all__ = [
+    "FollowUpStatus",
+    "FollowUpTriggerType",
+    "InterventionCase",
+    "InterventionFollowUp",
+    "InterventionPlan",
+]

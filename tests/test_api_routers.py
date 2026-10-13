@@ -407,6 +407,175 @@ def test_approve_422_invalid_decision(approve_deps, client, mock_mentor_auth):
     assert response.status_code == 422
 
 
+# ============ Case Lifecycle (R5: close / escalate) ============
+
+
+def test_close_requires_auth(client):
+    response = client.post(f"/api/v1/cases/{uuid4()}/close")
+    assert response.status_code == 401
+
+
+def test_escalate_requires_auth(client):
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/escalate", json={"target": "HOD"}
+    )
+    assert response.status_code == 401
+
+
+def test_close_happy_path_audits_no_event(approve_deps, client, mock_mentor_auth):
+    """200: RESOLVED → CLOSED + closed_at, CASE_CLOSED audit row, no domain
+    event (03 §8.2 has no case-closed event)."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, mock_mentor_auth.user_id, InterventionCaseStatus.RESOLVED
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/close")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"case_id", "case_status", "closed_at"}
+    assert data["case_id"] == str(case_id)
+    assert data["case_status"] == "CLOSED"
+    assert case.status == InterventionCaseStatus.CLOSED
+    assert case.closed_at is not None
+    session.add.assert_called_once()
+    assert session.add.call_args[0][0].action_type == "CASE_CLOSED"
+    session.commit.assert_awaited()
+
+
+def test_close_409_illegal_state(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, mock_mentor_auth.user_id, InterventionCaseStatus.ACTIVE
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/close")
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_close_404_unknown_case(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{uuid4()}/close")
+    assert response.status_code == 404
+
+
+def test_close_403_not_assigned_mentor(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, uuid4(), InterventionCaseStatus.RESOLVED
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/close")
+    assert response.status_code == 403
+
+
+def test_escalate_happy_path_audits_keeps_status(
+    approve_deps, client, mock_mentor_auth
+):
+    """200: ESCALATION_REQUIRED self-transition; CASE_ESCALATED audit row
+    carries the target; no domain event."""
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, mock_mentor_auth.user_id, InterventionCaseStatus.ESCALATION_REQUIRED
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/escalate",
+        json={"target": "HOD", "note": "Student not engaging with AI guidance"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert set(data.keys()) == {"case_id", "case_status", "escalated_to", "acted_at"}
+    assert data["case_status"] == "ESCALATION_REQUIRED"
+    assert data["escalated_to"] == "HOD"
+    assert case.status == InterventionCaseStatus.ESCALATION_REQUIRED
+    session.add.assert_called_once()
+    audit = session.add.call_args[0][0]
+    assert audit.action_type == "CASE_ESCALATED"
+    assert audit.new_state["escalated_to"] == "HOD"
+    session.commit.assert_awaited()
+
+
+def test_escalate_409_illegal_state(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    session.add = MagicMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, mock_mentor_auth.user_id, InterventionCaseStatus.ACTIVE
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/escalate", json={"target": "HOD"}
+    )
+    assert response.status_code == 409
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+def test_escalate_422_target_outside_frozen_table(
+    approve_deps, client, mock_mentor_auth
+):
+    """03 §10.2 names exactly HOD/CT — Support Services is not a target."""
+    session = AsyncMock()
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/escalate",
+        json={"target": "SUPPORT_SERVICES"},
+    )
+    assert response.status_code == 422
+
+
+def test_escalate_404_unknown_case(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/escalate", json={"target": "CT"}
+    )
+    assert response.status_code == 404
+
+
+def test_escalate_403_not_assigned_mentor(approve_deps, client, mock_mentor_auth):
+    session = AsyncMock()
+    case_id = uuid4()
+    case, _ = _case_and_plan(
+        case_id, uuid4(), InterventionCaseStatus.ESCALATION_REQUIRED
+    )
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/escalate", json={"target": "HOD"}
+    )
+    assert response.status_code == 403
+
+
 # ---- P1 remediation regressions (F-01 / F-03) ----
 
 def _plan(case_id, *, status="ACCEPTED", mentor_decision=None, days_ago=0):
@@ -1111,6 +1280,202 @@ def test_student_decision_uses_row_lock():
 
     sql = str(_case_row_for_update(uuid4()).compile(dialect=postgresql.dialect()))
     assert "FOR UPDATE" in sql.upper()
+
+
+# ============ Case Follow-Ups (ADR-004) ============
+
+
+def test_follow_up_requires_auth(client):
+    """Both endpoints reject unauthenticated requests."""
+    case_id = uuid4()
+    response = client.post(
+        f"/api/v1/cases/{case_id}/follow-ups",
+        json={"trigger_type": "CUSTOM_DATE", "due_at": datetime.now(UTC).isoformat()},
+    )
+    assert response.status_code == 401
+    response = client.get(f"/api/v1/cases/{case_id}/follow-ups")
+    assert response.status_code == 401
+
+
+def test_create_follow_up_happy_path(client, approve_deps, mock_mentor_auth):
+    """Assigned mentor schedules a CUSTOM_DATE follow-up on an ACTIVE case:
+    201 + FOLLOW_UP_SCHEDULED audit + committed SCHEDULED row."""
+    from app.models.enums import FollowUpTriggerType
+
+    auth = mock_mentor_auth
+    case_id = uuid4()
+    case = _case_and_plan(case_id, auth.user_id, InterventionCaseStatus.ACTIVE)[0]
+    session = AsyncMock()
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, auth, session)
+    due = (datetime.now(UTC) + timedelta(days=3)).isoformat()
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/follow-ups",
+        json={"trigger_type": "CUSTOM_DATE", "due_at": due},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["case_id"] == str(case_id)
+    assert data["trigger_type"] == FollowUpTriggerType.CUSTOM_DATE.value
+    assert data["status"] == "SCHEDULED"
+    assert data["due_at"] is not None
+    assert "id" in data and "created_at" in data
+    session.add.assert_called()
+    audit = session.add.call_args_list[0][0][0]
+    assert audit.action_type == "FOLLOW_UP_SCHEDULED"
+    assert audit.entity_table == "intervention_follow_ups"
+    session.commit.assert_awaited()
+
+
+def test_create_follow_up_event_type_forbids_due_at(client, approve_deps, mock_mentor_auth):
+    """Event-driven trigger with due_at is rejected at schema level (422)."""
+    session = AsyncMock()
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/follow-ups",
+        json={
+            "trigger_type": "ATTENDANCE_INTERVENTION",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_create_follow_up_custom_date_requires_due_at(client, approve_deps, mock_mentor_auth):
+    """CUSTOM_DATE without due_at is rejected at schema level (422)."""
+    session = AsyncMock()
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/follow-ups",
+        json={"trigger_type": "CUSTOM_DATE"},
+    )
+    assert response.status_code == 422
+
+
+def test_create_follow_up_past_due_at_is_400(client, approve_deps, mock_mentor_auth):
+    """CUSTOM_DATE with a past due_at fails the service rule (400)."""
+    auth = mock_mentor_auth
+    case_id = uuid4()
+    case = _case_and_plan(case_id, auth.user_id, InterventionCaseStatus.ACTIVE)[0]
+    session = AsyncMock()
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/follow-ups",
+        json={
+            "trigger_type": "CUSTOM_DATE",
+            "due_at": (datetime.now(UTC) - timedelta(hours=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 400
+    session.commit.assert_not_awaited()
+
+
+def test_create_follow_up_409_case_not_active(client, approve_deps, mock_mentor_auth):
+    """Only ACTIVE cases accept follow-ups (ADR-004 §2.7)."""
+    auth = mock_mentor_auth
+    case_id = uuid4()
+    case = _case_and_plan(case_id, auth.user_id, InterventionCaseStatus.PENDING_APPROVAL)[0]
+    session = AsyncMock()
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/follow-ups",
+        json={
+            "trigger_type": "CUSTOM_DATE",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 409
+    session.commit.assert_not_awaited()
+
+
+def test_create_follow_up_404_unknown_case(client, approve_deps, mock_mentor_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{uuid4()}/follow-ups",
+        json={
+            "trigger_type": "CUSTOM_DATE",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 404
+
+
+def test_create_follow_up_403_unassigned_mentor(client, approve_deps, mock_mentor_auth):
+    """Record-level authz: a mentor who is not assigned and is not admin
+    gets 403 with the shared no-oracle detail."""
+    auth = mock_mentor_auth
+    case_id = uuid4()
+    case = _case_and_plan(case_id, uuid4(), InterventionCaseStatus.ACTIVE)[0]
+    session = AsyncMock()
+    session.execute = _result_returning(case)
+    _override_auth_and_session(approve_deps, auth, session)
+
+    response = client.post(
+        f"/api/v1/cases/{case_id}/follow-ups",
+        json={
+            "trigger_type": "CUSTOM_DATE",
+            "due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized for this case"
+    assert not session.add.called
+
+
+def test_list_follow_ups_happy_path(client, approve_deps, mock_mentor_auth):
+    """Assigned mentor lists follow-ups: newest-first rows, response schema."""
+    from app.models.intervention import InterventionFollowUp
+
+    auth = mock_mentor_auth
+    case_id = uuid4()
+    case = _case_and_plan(case_id, auth.user_id, InterventionCaseStatus.MONITORING)[0]
+    now = datetime.now(UTC)
+    follow_up = InterventionFollowUp(
+        id=uuid4(),
+        case_id=case_id,
+        trigger_type="CUSTOM_DATE",
+        status="FULFILLED",
+        due_at=now - timedelta(days=1),
+        evaluation_window_ends_at=now + timedelta(days=6),
+        created_by=str(auth.user_id),
+        created_at=now,
+    )
+    session = AsyncMock()
+    session.execute = _result_returning(case, [follow_up])
+    _override_auth_and_session(approve_deps, auth, session)
+
+    response = client.get(f"/api/v1/cases/{case_id}/follow-ups")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list) and len(data) == 1
+    item = data[0]
+    assert item["id"] == str(follow_up.id)
+    assert item["case_id"] == str(case_id)
+    assert item["trigger_type"] == "CUSTOM_DATE"
+    assert item["status"] == "FULFILLED"
+    assert item["due_at"] is not None
+    assert "created_at" in item
+
+
+def test_list_follow_ups_404_unknown_case(client, approve_deps, mock_mentor_auth):
+    session = AsyncMock()
+    session.execute = _result_returning(None)
+    _override_auth_and_session(approve_deps, mock_mentor_auth, session)
+
+    response = client.get(f"/api/v1/cases/{uuid4()}/follow-ups")
+    assert response.status_code == 404
 
 
 # ============ OpenAPI Contract Tests ============

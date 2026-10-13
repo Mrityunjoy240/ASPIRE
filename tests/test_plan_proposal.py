@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -34,6 +34,7 @@ from app.agents.supervisor import (
     DECISION_ESCALATE,
     DECISION_ROUTE,
     EVENT_ATTENDANCE_RISK_WARNING,
+    EVENT_PLAN_DECLINED,
     EVENT_TASK_OVERDUE,
     INTERVENTION_AGENT,
     CaseUnavailable,
@@ -739,12 +740,80 @@ async def test_proposal_specialist_none_keeps_route_only():
     assert run.case_id is not None
 
 
-async def test_intervention_route_never_invokes_proposal():
+async def test_intervention_route_other_events_never_invoke_proposal():
+    """R5 scope: only PLAN_DECLINED (the replan trigger) joins the proposal
+    hook on the intervention route. TASK_OVERDUE and friends stay route-only
+    (no contracted proposal behavior for those events)."""
     proposal = FakeProposal()
     supervisor, tools = make_supervisor_with_proposal(proposal)
     run = await supervisor.handle(make_event(EVENT_TASK_OVERDUE))
     assert run.target_agent == INTERVENTION_AGENT
     assert proposal.calls == []
+
+
+async def test_plan_declined_route_invokes_proposal():
+    """R5 (§10.2 REPLAN_REQUIRED → PLAN_PROPOSED): the PLAN_DECLINED route
+    invokes the proposal specialist so the agent can propose a new plan."""
+    proposal = FakeProposal()
+    supervisor, tools = make_supervisor_with_proposal(proposal)
+    case_id = uuid.uuid4()
+    event = DomainEvent(
+        event_type=EVENT_PLAN_DECLINED,
+        student_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
+        payload={"case_id": str(case_id)},
+    )
+    run = await supervisor.handle(event)
+    assert run.decision == DECISION_ROUTE
+    assert run.target_agent == INTERVENTION_AGENT
+    assert len(proposal.calls) == 1
+    student_id, proposed_case_id = proposal.calls[0]
+    assert proposed_case_id == case_id
+    assert student_id == run.student_id
+    assert run.case_id == case_id
+
+
+async def test_plan_declined_specialist_none_stays_route_only():
+    tools = FakeSupervisorTools()
+    supervisor = Supervisor(
+        tools=tools,
+        attendance_specialist=FakeAttendance(),
+        proposal_specialist=None,
+    )
+    event = DomainEvent(
+        event_type=EVENT_PLAN_DECLINED,
+        student_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
+        payload={"case_id": str(uuid.uuid4())},
+    )
+    run = await supervisor.handle(event)
+    assert run.target_agent == INTERVENTION_AGENT
+    assert run.decision == DECISION_ROUTE
+
+
+async def test_plan_declined_too_many_declines_keeps_route():
+    """EC-AG-05 stop surfaces as a soft refusal: routing stands, the reason
+    code is traceable, the case state is unchanged (06 §6)."""
+    proposal = FakeProposal(
+        ProposalOutcome(
+            proposed=False,
+            plan_id=None,
+            reason_codes=(),
+            refusal_code="TOO_MANY_DECLINES",
+        )
+    )
+    supervisor, _ = make_supervisor_with_proposal(proposal)
+    event = DomainEvent(
+        event_type=EVENT_PLAN_DECLINED,
+        student_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
+        payload={"case_id": str(uuid.uuid4())},
+    )
+    run = await supervisor.handle(event)
+    assert run.decision == DECISION_ROUTE
+    assert run.target_agent == INTERVENTION_AGENT
+    assert "TOO_MANY_DECLINES" in run.reason_codes
+    assert run.human_review_required is False
 
 
 async def test_proposal_conflict_refusal_escalates():
@@ -796,3 +865,136 @@ def test_attendance_specialist_still_has_no_sqlalchemy_or_http():
     assert "from sqlalchemy" not in source
     assert "import httpx" not in source
     assert "app.models" not in source
+
+
+# --- EC-AG-05: consecutive student declines stop auto-generation --------------
+
+
+def _lifecycle_case(status):
+    from app.models.intervention import InterventionCase
+
+    now = datetime.now(UTC)
+    return InterventionCase(
+        id=uuid.uuid4(),
+        student_id=uuid.uuid4(),
+        mentor_id=uuid.uuid4(),
+        status=status,
+        urgency_band="ATTENTION",
+        opened_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _decided_plan(
+    *, student_decision: str | None, days_ago: int, mentor_decision: str | None = None
+):
+    from app.models.intervention import InterventionPlan
+
+    created = datetime.now(UTC) - timedelta(days=days_ago)
+    return InterventionPlan(
+        id=uuid.uuid4(),
+        case_id=uuid.uuid4(),
+        created_by="SYSTEM_AGENT",
+        status="DECLINED" if student_decision == "DECLINED" else "ACCEPTED",
+        plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS", "count": 3}],
+        reason_codes=["LOW_ATTENDANCE"],
+        evidence=[],
+        student_decision=student_decision,
+        mentor_decision=mentor_decision,
+        created_at=created,
+        updated_at=created,
+    )
+
+
+async def _propose_with_plans(case, plans):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from app.services.plan_proposal_service import (
+        PlanProposalError,
+        propose_intervention_plan,
+    )
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    try:
+        result = await propose_intervention_plan(
+            session,
+            case=case,
+            existing_plans=plans,
+            reason_codes=["LOW_ATTENDANCE"],
+            plan_actions=[{"type": "ATTEND_CLASS", "subject": "DBMS", "count": 3}],
+            evidence_entries=[],
+        )
+    except PlanProposalError as exc:
+        return session, exc
+    return session, result
+
+
+async def test_ec_ag_05_three_consecutive_declines_stop_generation():
+    from app.models.enums import InterventionCaseStatus
+
+    case = _lifecycle_case(InterventionCaseStatus.REPLAN_REQUIRED)
+    plans = [
+        _decided_plan(student_decision="DECLINED", days_ago=1),
+        _decided_plan(student_decision="DECLINED", days_ago=8),
+        _decided_plan(student_decision="DECLINED", days_ago=15),
+    ]
+    session, outcome = await _propose_with_plans(case, plans)
+    assert getattr(outcome, "code", None) == "TOO_MANY_DECLINES"
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
+    session.add.assert_not_called()
+    session.commit.assert_not_awaited()
+
+
+async def test_ec_ag_05_two_declines_still_allows_generation():
+    from app.models.enums import InterventionCaseStatus
+
+    case = _lifecycle_case(InterventionCaseStatus.REPLAN_REQUIRED)
+    plans = [
+        _decided_plan(student_decision="DECLINED", days_ago=1),
+        _decided_plan(student_decision="DECLINED", days_ago=8),
+        _decided_plan(student_decision="ACCEPTED", days_ago=20),
+    ]
+    session, outcome = await _propose_with_plans(case, plans)
+    assert getattr(outcome, "code", None) is None
+    assert outcome.case_status == "PLAN_PROPOSED"
+    assert case.status == InterventionCaseStatus.PLAN_PROPOSED
+    session.commit.assert_awaited_once()
+
+
+async def test_ec_ag_05_customization_breaks_the_decline_streak():
+    from app.models.enums import InterventionCaseStatus
+
+    case = _lifecycle_case(InterventionCaseStatus.REPLAN_REQUIRED)
+    plans = [
+        _decided_plan(student_decision="DECLINED", days_ago=1),
+        _decided_plan(student_decision="CUSTOMIZED", days_ago=8),
+        _decided_plan(student_decision="DECLINED", days_ago=15),
+        _decided_plan(student_decision="DECLINED", days_ago=22),
+    ]
+    session, outcome = await _propose_with_plans(case, plans)
+    assert getattr(outcome, "code", None) is None
+    assert outcome.case_status == "PLAN_PROPOSED"
+
+
+async def test_ec_ag_05_mentor_rejection_does_not_count_as_student_decline():
+    """EC-AG-05 counts STUDENT declines only: a plan the student accepted
+    (then the mentor rejected) breaks the streak."""
+    from app.models.enums import InterventionCaseStatus
+
+    case = _lifecycle_case(InterventionCaseStatus.REPLAN_REQUIRED)
+    plans = [
+        _decided_plan(
+            student_decision="DECLINED",
+            days_ago=1,
+        ),
+        _decided_plan(
+            student_decision="ACCEPTED", days_ago=8, mentor_decision="REJECTED"
+        ),
+        _decided_plan(student_decision="DECLINED", days_ago=15),
+        _decided_plan(student_decision="DECLINED", days_ago=22),
+    ]
+    session, outcome = await _propose_with_plans(case, plans)
+    assert getattr(outcome, "code", None) is None
+    assert outcome.case_status == "PLAN_PROPOSED"

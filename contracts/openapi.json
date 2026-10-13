@@ -612,6 +612,248 @@
           }
         }
       }
+    },
+    "/api/v1/cases/{case_id}/escalate": {
+      "post": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Mentor escalates an ESCALATION_REQUIRED case to HOD/CT",
+        "description": "Mentor escalates to HOD/CT — stays ESCALATION_REQUIRED (pending\nHOD/CT). Target selection + optional note land on the mandatory\nCASE_ESCALATED audit row (07 §4); no domain event exists in the\ncatalog (03 §8.2). The frozen table names exactly HOD/CT (03 §10.2).",
+        "operationId": "escalate_case_endpoint_api_v1_cases__case_id__escalate_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseEscalateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseEscalateResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case not in ESCALATION_REQUIRED (03_SYSTEM_SPEC §10.2 self-transition)"
+          },
+          "400": {
+            "description": "Unknown escalation target"
+          },
+          "403": {
+            "description": "Not authorized for this case"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/close": {
+      "post": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Mentor closes a RESOLVED case",
+        "description": "Mentor closes a resolved case: RESOLVED → CLOSED + closed_at, with\nthe mandatory CASE_CLOSED audit row (07 §4). Audit-only — the catalog\n(03 §8.2) has no case-closed domain event (same precedent as a mentor\nplan rejection).",
+        "operationId": "close_case_endpoint_api_v1_cases__case_id__close_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseCloseResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case not in RESOLVED (03_SYSTEM_SPEC §10.2 RESOLVED → CLOSED)"
+          },
+          "403": {
+            "description": "Not authorized for this case"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/follow-ups": {
+      "post": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "Mentor schedules a follow-up on an ACTIVE case",
+        "description": "Mentor schedules a follow-up: ACTIVE case only (03 §10.2,\nADR-004 §2.7). `CUSTOM_DATE` requires a future timezone-aware `due_at`;\nevent-driven types (`ATTENDANCE_INTERVENTION`, `STUDY_INTERVENTION`,\n`ASSIGNMENT_INTERVENTION`) are fulfilled by their policy trigger events\nand forbid `due_at`. Persists an `intervention_follow_ups` SCHEDULED row\nplus the mandatory FOLLOW_UP_SCHEDULED audit row (ADR-004 §2.8).",
+        "operationId": "create_follow_up_api_v1_cases__case_id__follow_ups_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FollowUpCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowUpCreateResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case not in ACTIVE (ADR-004 §2.7)"
+          },
+          "400": {
+            "description": "Invalid trigger_type/due_at combination (ADR-004 §2.7)"
+          },
+          "403": {
+            "description": "Not authorized for this case"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Intervention Cases"
+        ],
+        "summary": "List follow-ups for a case",
+        "description": "Read-only list of a case's follow-ups (newest first). Same\nrecord-level authorization as the write path (07 §2).",
+        "operationId": "list_follow_ups_api_v1_cases__case_id__follow_ups_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Case Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FollowUpResponse"
+                  },
+                  "title": "Response List Follow Ups Api V1 Cases  Case Id  Follow Ups Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -964,6 +1206,92 @@
         ],
         "title": "CaseApproveResponse"
       },
+      "CaseCloseResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "case_status": {
+            "type": "string",
+            "title": "Case Status"
+          },
+          "closed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Closed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_status",
+          "closed_at"
+        ],
+        "title": "CaseCloseResponse",
+        "description": "Mentor closure of a RESOLVED case (03 §10.2 RESOLVED → CLOSED)."
+      },
+      "CaseEscalateRequest": {
+        "properties": {
+          "target": {
+            "type": "string",
+            "enum": [
+              "HOD",
+              "CT"
+            ],
+            "title": "Target"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target"
+        ],
+        "title": "CaseEscalateRequest",
+        "description": "Mentor escalation of an ESCALATION_REQUIRED case (03 §10.2\nself-transition; 02 §2.2 Steps 3-5).\n\nThe frozen transition table names exactly HOD/CT as targets. The note\nis optional mentor-authored text (02 §2.2 Step 3), length-capped here\nand recorded only on the CASE_ESCALATED audit row — no case column\nexists for it (05 §9)."
+      },
+      "CaseEscalateResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "case_status": {
+            "type": "string",
+            "title": "Case Status"
+          },
+          "escalated_to": {
+            "type": "string",
+            "title": "Escalated To"
+          },
+          "acted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Acted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "case_status",
+          "escalated_to",
+          "acted_at"
+        ],
+        "title": "CaseEscalateResponse"
+      },
       "CaseQueueItemResponse": {
         "properties": {
           "case_id": {
@@ -1041,6 +1369,137 @@
           "days_since_last_action"
         ],
         "title": "CaseQueueItemResponse"
+      },
+      "FollowUpCreateRequest": {
+        "properties": {
+          "trigger_type": {
+            "type": "string",
+            "enum": [
+              "ATTENDANCE_INTERVENTION",
+              "STUDY_INTERVENTION",
+              "ASSIGNMENT_INTERVENTION",
+              "CUSTOM_DATE"
+            ],
+            "title": "Trigger Type"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trigger_type"
+        ],
+        "title": "FollowUpCreateRequest",
+        "description": "Mentor schedules a follow-up on an ACTIVE case (02 §2.1 Steps 5-6,\n06 §4 schedule_followup; ADR-004 §2.7).\n\n`due_at` is required IFF trigger_type=CUSTOM_DATE (mentor custom date,\nmust be timezone-aware and future); event-driven types are fulfilled by\ntheir policy trigger events and forbid `due_at`."
+      },
+      "FollowUpCreateResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "trigger_type": {
+            "type": "string",
+            "title": "Trigger Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "trigger_type",
+          "status",
+          "due_at",
+          "created_at"
+        ],
+        "title": "FollowUpCreateResponse",
+        "description": "201 body for POST /cases/{case_id}/follow-ups."
+      },
+      "FollowUpResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "trigger_type": {
+            "type": "string",
+            "title": "Trigger Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "trigger_type",
+          "status",
+          "due_at",
+          "created_at"
+        ],
+        "title": "FollowUpResponse"
       },
       "HTTPValidationError": {
         "properties": {

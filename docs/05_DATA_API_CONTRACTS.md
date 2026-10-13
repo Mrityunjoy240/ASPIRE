@@ -423,6 +423,41 @@ entry, so no metadata can be fabricated. Producers holding typed backend facts
 use `build_evidence_entry` so value types survive. Versioning of this contract
 is deferred (DEC-01).
 
+### `intervention_follow_ups`
+
+Added by [ADR-004](decisions/ADR-004_INTERVENTION_FOLLOWUP_MODEL.md) (lead
+decision, option C, 13 Oct 2026). Persists the follow-up policy assumed by
+`02_USER_JOURNEYS.md` §2.1 Steps 5-7, `06_AGENT_SPEC.md` §4
+(`schedule_followup`) and the three `RULE_ENGINE` follow-up rows of
+`03_SYSTEM_SPEC.md` §10.2.
+
+```sql
+id                        UUID PRIMARY KEY
+case_id                   UUID NOT NULL REFERENCES intervention_cases(id)
+trigger_type              TEXT NOT NULL  -- ATTENDANCE_INTERVENTION | STUDY_INTERVENTION | ASSIGNMENT_INTERVENTION | CUSTOM_DATE
+status                    TEXT NOT NULL DEFAULT 'SCHEDULED'  -- SCHEDULED | FULFILLED | EVALUATED
+due_at                    TIMESTAMPTZ    -- CUSTOM_DATE only; NULL for event-driven types
+triggered_at              TIMESTAMPTZ    -- fulfilment time (event fired / due date reached)
+evaluation_window_ends_at TIMESTAMPTZ    -- set on fulfilment; drives the expiry re-check
+evaluated_at              TIMESTAMPTZ    -- improvement check performed
+outcome                   TEXT           -- RESOLVED | REPLAN_REQUIRED | NULL while pending
+created_by                TEXT NOT NULL  -- 'SYSTEM' or user UUID
+created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**Lifecycle:** `SCHEDULED → FULFILLED → EVALUATED`. The status flip under
+`SELECT ... FOR UPDATE` is the durable consumer-side dedup (ADR-004 §2.3,
+lead option A). Multiple SCHEDULED rows per case are legal (mentor may stack
+a custom date on an event-driven follow-up).
+
+**API shapes (ADR-004 §2.7):**
+- `POST /api/v1/cases/{case_id}/follow-ups` → `201 FollowUpCreateResponse`
+  (`{id, case_id, trigger_type, status, due_at, created_at}`); case must be
+  `ACTIVE`; `due_at` required iff `trigger_type=CUSTOM_DATE` (future
+  timestamp), forbidden otherwise.
+- `GET /api/v1/cases/{case_id}/follow-ups` → `200 list[FollowUpResponse]`
+  (same fields; `created_at DESC`).
+
 ---
 
 ## 10. Learning Workspace Tables

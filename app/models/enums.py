@@ -71,6 +71,23 @@ class InterventionCaseStatus(str, enum.Enum):
     CLOSED = "CLOSED"
 
 
+class FollowUpTriggerType(str, enum.Enum):
+    """06 §4 follow-up trigger policies + 02 §2.1 Step 6 mentor custom date."""
+
+    ATTENDANCE_INTERVENTION = "ATTENDANCE_INTERVENTION"
+    STUDY_INTERVENTION = "STUDY_INTERVENTION"
+    ASSIGNMENT_INTERVENTION = "ASSIGNMENT_INTERVENTION"
+    CUSTOM_DATE = "CUSTOM_DATE"
+
+
+class FollowUpStatus(str, enum.Enum):
+    """ADR-004 §2.3 lifecycle: SCHEDULED → FULFILLED → EVALUATED."""
+
+    SCHEDULED = "SCHEDULED"
+    FULFILLED = "FULFILLED"
+    EVALUATED = "EVALUATED"
+
+
 class RecordStatus(str, enum.Enum):
     VERIFIED = "VERIFIED"
     PROVISIONAL = "PROVISIONAL"

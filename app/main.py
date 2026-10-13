@@ -13,8 +13,9 @@ from app.agents.supervisor import Supervisor
 from app.agents.tools import ServiceBackedTools
 from app.api.routers import assessments, attendance, cases, students, tasks
 from app.core.config import settings
-from app.core.database import engine
+from app.core.database import async_session_maker, engine
 from app.core.events import EventBus
+from app.services.follow_up_service import FollowUpConsumer
 from app.services.llm_service import get_llm_service
 from app.services.scheduler import cancel_scheduler_task, create_scheduler_task
 
@@ -42,6 +43,13 @@ async def lifespan(app: FastAPI):
         supervisor = build_supervisor(llm)
         app.state.supervisor = supervisor
     supervisor.ensure_subscribed(app.state.event_bus)
+    # ADR-004: deterministic RULE_ENGINE follow-up consumer (MENTOR_FOLLOWUP_DUE
+    # + policy trigger events). Idempotent per bus, same as the Supervisor.
+    consumer = getattr(app.state, "follow_up_consumer", None)
+    if consumer is None:
+        consumer = FollowUpConsumer(async_session_maker)
+        app.state.follow_up_consumer = consumer
+    consumer.ensure_subscribed(app.state.event_bus)
     # R4 / DM-AG03: startup evaluation + every 5 minutes (task is None when
     # disabled — tests keep the "engine never connects" invariant).
     scheduler_task = create_scheduler_task(app.state.event_bus)
