@@ -545,7 +545,107 @@ def test_approve_non_mentor_non_admin_403(authz_deps, client):
 
     response = client.post(f"/api/v1/cases/{uuid.uuid4()}/approve", json={"decision": "APPROVED"})
     assert response.status_code == 403
-    assert response.json()["detail"] == "Mentor or Admin role required"
+    assert response.json()["detail"] == "Mentor, HOD or Admin role required"
+
+
+def test_student_case_queue_403(authz_deps, client):
+    """The widened case gate still excludes students (07 §2)."""
+    student = _auth([UserRole.STUDENT])
+    session = _session()
+    _override(authz_deps, student, session)
+
+    response = client.get("/api/v1/cases/queue")
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Mentor, HOD or Admin role required"
+
+
+def test_queue_hod_path_is_escalation_scoped(authz_deps, client):
+    """F5 (lead-directed alignment, 16 Oct 2026): 07 §2 "HOD: Escalations"
+    — the HOD queue branch is institution-scoped AND filtered to
+    `ESCALATION_REQUIRED` rows only (the pending-HOD/CT marker, 03 §10.2),
+    not the full admin status list."""
+    from sqlalchemy.dialects import postgresql
+
+    hod = _auth([UserRole.HOD])
+    captured = []
+
+    async def execute(stmt):
+        captured.append(stmt)
+        return _result(rows=[])
+
+    session = AsyncMock()
+    session.execute = execute
+    _override(authz_deps, hod, session)
+
+    response = client.get("/api/v1/cases/queue")
+    assert response.status_code == 200
+
+    sql = str(captured[0].compile(dialect=postgresql.dialect())).upper()
+    assert "JOIN STUDENT_PROFILES" in sql
+    assert "JOIN BATCHES" in sql
+    assert "INSTITUTION_ID" in sql
+    # The status equality binds 'ESCALATION_REQUIRED' as a parameter —
+    # assert on the compiled bind values, not the SQL text.
+    compiled = captured[0].compile(dialect=postgresql.dialect())
+    assert any("ESCALATION_REQUIRED" in str(v) for v in compiled.params.values())
+
+
+def test_approve_hod_escalated_case_reaches_service(authz_deps, client):
+    """F5: same-institution HOD on an ESCALATION_REQUIRED case passes the
+    escalation guard + record-level institution check and reaches the
+    approval service — which refuses the illegal state (409, the case is
+    not PENDING_APPROVAL). The 409 proves the HOD path cleared authz."""
+    institution_id = uuid.uuid4()
+    hod = _auth([UserRole.HOD], institution_id=institution_id)
+    case_id = uuid.uuid4()
+    case = _case(
+        case_id, uuid.uuid4(), uuid.uuid4(),
+        status=InterventionCaseStatus.ESCALATION_REQUIRED,
+    )
+    session = _session(
+        _result(scalar=case),
+        _result(scalar=institution_id),  # same institution
+        _result(scalars=[]),             # plans query (handler pre-fetch)
+    )
+    _override(authz_deps, hod, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 409
+
+
+def test_approve_hod_non_escalated_case_403(authz_deps, client):
+    """F5 (07 §2 "HOD: Escalations"): HOD is refused on any case outside
+    `ESCALATION_REQUIRED`, same constant detail (no scope oracle)."""
+    institution_id = uuid.uuid4()
+    hod = _auth([UserRole.HOD], institution_id=institution_id)
+    case_id = uuid.uuid4()
+    case = _case(case_id, uuid.uuid4(), uuid.uuid4())  # PENDING_APPROVAL
+    session = _session(_result(scalar=case))
+    _override(authz_deps, hod, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized for this case"
+
+
+def test_approve_hod_cross_institution_403(authz_deps, client):
+    """F5: record-level institution scoping is unchanged for HOD — an
+    escalated case in a foreign institution is the same 403 (no oracle)."""
+    hod = _auth([UserRole.HOD])
+    case_id = uuid.uuid4()
+    case = _case(
+        case_id, uuid.uuid4(), uuid.uuid4(),
+        status=InterventionCaseStatus.ESCALATION_REQUIRED,
+    )
+    session = _session(
+        _result(scalar=case),
+        _result(scalar=uuid.uuid4()),  # case's institution != HOD's
+    )
+    _override(authz_deps, hod, session)
+
+    response = client.post(f"/api/v1/cases/{case_id}/approve", json={"decision": "APPROVED"})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Not authorized for this case"
 
 
 # ------------------------------------------- real dependency path (JWKS)
@@ -578,7 +678,7 @@ def rsa_jwks():
 
 
 def _signed_token(priv_pem, *, sub, aud="r1-test-aud", exp_delta=300, kid="r1-test-key",
-                  extra_headers=None, extra_claims=None):
+                  extra_headers=None, extra_claims=None, drop=()):
     now = int(time.time())
     payload = {
         "sub": str(sub),
@@ -590,19 +690,29 @@ def _signed_token(priv_pem, *, sub, aud="r1-test-aud", exp_delta=300, kid="r1-te
     }
     if extra_claims:
         payload.update(extra_claims)
+    for claim in drop:
+        payload.pop(claim, None)
     headers = {"kid": kid} if kid else {}
     if extra_headers:
         headers.update(extra_headers)
     return jose_jwt.encode(payload, priv_pem, algorithm="RS256", headers=headers)
 
 
+def _b64url_int(value: int) -> str:
+    raw = value.to_bytes((value.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
 @pytest.fixture
-def aud_patch(monkeypatch):
-    """Deterministic audience for token validation (never reads .env)."""
-    monkeypatch.setattr(app_settings, "next_public_supabase_publishable_key", "r1-test-aud")
+def jwt_cfg(monkeypatch):
+    """Deterministic JWT validation configuration (never reads .env):
+    explicit audience + issuer. The publishable key is deliberately NOT
+    touched — it must never be usable as a token audience (07 §1)."""
+    monkeypatch.setattr(app_settings, "supabase_jwt_audience", "r1-test-aud")
+    monkeypatch.setattr(app_settings, "supabase_jwt_issuer", "supabase-test")
 
 
-def test_real_jwt_chain_builds_context_and_authorizes(authz_deps, client, rsa_jwks, aud_patch):
+def test_real_jwt_chain_builds_context_and_authorizes(authz_deps, client, rsa_jwks, jwt_cfg):
     """End-to-end dependency path: bearer token -> JWKS (mocked) -> RS256
     verify -> get_auth_context roles from user_role_assignments -> ownership
     helper -> handler. Supabase 'role' claim is identity-only (EC-USR-01)."""
@@ -638,7 +748,7 @@ def test_real_jwt_chain_builds_context_and_authorizes(authz_deps, client, rsa_jw
         ({"kid": None}, 401),               # missing kid header
     ],
 )
-def test_real_jwt_chain_rejects_bad_tokens(authz_deps, client, rsa_jwks, aud_patch,
+def test_real_jwt_chain_rejects_bad_tokens(authz_deps, client, rsa_jwks, jwt_cfg,
                                            token_kwargs, expected):
     priv_pem, jwks = rsa_jwks
     session = _session()
@@ -653,7 +763,7 @@ def test_real_jwt_chain_rejects_bad_tokens(authz_deps, client, rsa_jwks, aud_pat
     assert response.status_code == expected
 
 
-def test_real_jwt_chain_rejects_tampered_signature(authz_deps, client, rsa_jwks, aud_patch):
+def test_real_jwt_chain_rejects_tampered_signature(authz_deps, client, rsa_jwks, jwt_cfg):
     priv_pem, jwks = rsa_jwks
     session = _session()
     _override_session_only(authz_deps, session)
@@ -668,7 +778,7 @@ def test_real_jwt_chain_rejects_tampered_signature(authz_deps, client, rsa_jwks,
     assert response.status_code == 401
 
 
-def test_real_jwt_chain_suspended_user_403(authz_deps, client, rsa_jwks, aud_patch):
+def test_real_jwt_chain_suspended_user_403(authz_deps, client, rsa_jwks, jwt_cfg):
     priv_pem, jwks = rsa_jwks
     user_id = uuid.uuid4()
     user = _user(user_id, uuid.uuid4(), status="SUSPENDED")
@@ -685,7 +795,7 @@ def test_real_jwt_chain_suspended_user_403(authz_deps, client, rsa_jwks, aud_pat
     assert response.json()["detail"] == "User account suspended"
 
 
-def test_real_jwt_chain_no_role_assignments_403(authz_deps, client, rsa_jwks, aud_patch):
+def test_real_jwt_chain_no_role_assignments_403(authz_deps, client, rsa_jwks, jwt_cfg):
     """Valid identity but zero ASPIRE role assignments -> ownership denies."""
     priv_pem, jwks = rsa_jwks
     user_id = uuid.uuid4()
@@ -705,3 +815,226 @@ def test_real_jwt_chain_no_role_assignments_403(authz_deps, client, rsa_jwks, au
         )
     assert response.status_code == 403
     assert response.json()["detail"] == DENIED
+
+
+# --------------------------------- F1: strict JWT validation contract (07 §1)
+
+
+def test_real_jwt_chain_rejects_wrong_issuer(authz_deps, client, rsa_jwks, jwt_cfg):
+    """`iss` must match the configured Supabase issuer — a validly signed
+    token minted against another project/issuer is refused (401)."""
+    priv_pem, jwks = rsa_jwks
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(
+        priv_pem, sub=uuid.uuid4(),
+        extra_claims={"iss": "https://evil.example/auth/v1"},
+    )
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+    assert "Invalid token" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("drop", ["sub", "exp", "aud", "iss"])
+def test_real_jwt_chain_rejects_missing_required_claims(
+    authz_deps, client, rsa_jwks, jwt_cfg, drop
+):
+    """sub/exp/aud/iss are required by 07 §1 — a missing claim is a 401,
+    never a 500 (pydantic ValidationError is mapped like a JWT error)."""
+    priv_pem, jwks = rsa_jwks
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(priv_pem, sub=uuid.uuid4(), drop=(drop,))
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+
+
+def test_real_jwt_chain_rejects_hs256_alg_confusion(authz_deps, client, rsa_jwks, jwt_cfg):
+    """An HS256 token presenting the legitimate `kid` is refused before the
+    key is even fetched: the header alg is pinned to RS256 (algorithm
+    confusion / 'none'-style bypass cannot reach verification)."""
+    _priv_pem, jwks = rsa_jwks
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    now = int(time.time())
+    token = jose_jwt.encode(
+        {"sub": str(uuid.uuid4()), "aud": "r1-test-aud", "iss": "supabase-test",
+         "iat": now, "exp": now + 300},
+        "shared-secret",
+        algorithm="HS256",
+        headers={"kid": "r1-test-key"},
+    )
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"kty": "OKP"},     # not an RSA key
+        {"alg": "ES256"},   # wrong algorithm for the token family
+        {"use": "enc"},     # encryption key, not a signature key
+    ],
+)
+def test_real_jwt_chain_rejects_unusable_jwk(
+    authz_deps, client, rsa_jwks, jwt_cfg, overrides
+):
+    """A JWKS entry that is not an RSA signature key can never become a
+    verifier, even when the token's `kid` selects it (07 §1)."""
+    priv_pem, _jwks = rsa_jwks
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+    priv = load_pem_private_key(priv_pem.encode(), password=None)
+    pub = priv.public_key().public_numbers()
+    jwk_fields = dict(
+        kty="RSA", kid="r1-test-key", use="sig", alg="RS256",
+        n=_b64url_int(pub.n), e=_b64url_int(pub.e),
+    )
+    jwk_fields.update(overrides)
+    jwks = JWKS(keys=[JWK(**jwk_fields)])
+    token = _signed_token(priv_pem, sub=uuid.uuid4())
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+
+
+def test_real_jwt_chain_rejects_short_rsa_key(authz_deps, client, jwt_cfg):
+    """An RSA modulus below the 2048-bit floor is refused even if the JWKS
+    serves it and the signature is otherwise valid."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=1024)
+    priv_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    pub = key.public_key().public_numbers()
+    jwks = JWKS(keys=[JWK(
+        kty="RSA", kid="r1-test-key", use="sig", alg="RS256",
+        n=_b64url_int(pub.n), e=_b64url_int(pub.e),
+    )])
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(priv_pem, sub=uuid.uuid4())
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    "field", ["supabase_jwt_audience", "supabase_jwt_issuer"]
+)
+def test_real_jwt_chain_fails_closed_when_validation_unconfigured(
+    authz_deps, client, rsa_jwks, jwt_cfg, monkeypatch, field
+):
+    """Unresolvable validation configuration is refused (401), never a
+    silent skip of the aud/iss check (fail closed, 07 §1)."""
+    monkeypatch.setattr(app_settings, field, "")
+    if field == "supabase_jwt_issuer":
+        monkeypatch.setattr(app_settings, "next_public_supabase_url", "")
+    priv_pem, jwks = rsa_jwks
+    session = _session()
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(priv_pem, sub=uuid.uuid4())
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 401
+
+
+def test_real_jwt_chain_derives_issuer_from_project_url(
+    authz_deps, client, rsa_jwks, jwt_cfg, monkeypatch
+):
+    """Empty SUPABASE_JWT_ISSUER derives `{NEXT_PUBLIC_SUPABASE_URL}/auth/v1`
+    — the documented GoTrue issuer — and accepts a matching token."""
+    monkeypatch.setattr(app_settings, "supabase_jwt_issuer", "")
+    monkeypatch.setattr(app_settings, "next_public_supabase_url", "https://proj.supabase.co")
+    priv_pem, jwks = rsa_jwks
+    user_id = uuid.uuid4()
+    institution_id = uuid.uuid4()
+    user = _user(user_id, institution_id)
+    assignment = MagicMock()
+    assignment.role = UserRole.STUDENT
+    profile = _profile(user_id)
+    session = _session(
+        _result(scalar=user),
+        _result(scalars=[assignment]),
+        _result(first=(profile, institution_id)),
+        _result(rows=[]),
+    )
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(
+        priv_pem, sub=user_id,
+        extra_claims={"iss": "https://proj.supabase.co/auth/v1"},
+    )
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 200
+
+
+def test_real_jwt_chain_accepts_realistic_supabase_claims(authz_deps, client, rsa_jwks, jwt_cfg):
+    """A realistic Supabase access token (session/aal/app_metadata/
+    user_metadata/is_anonymous) passes validation — strictness must not
+    brick real sessions."""
+    priv_pem, jwks = rsa_jwks
+    user_id = uuid.uuid4()
+    institution_id = uuid.uuid4()
+    user = _user(user_id, institution_id)
+    assignment = MagicMock()
+    assignment.role = UserRole.STUDENT
+    profile = _profile(user_id)
+    session = _session(
+        _result(scalar=user),
+        _result(scalars=[assignment]),
+        _result(first=(profile, institution_id)),
+        _result(rows=[]),
+    )
+    _override_session_only(authz_deps, session)
+
+    token = _signed_token(
+        priv_pem, sub=user_id,
+        extra_claims={
+            "session_id": str(uuid.uuid4()),
+            "aal": "aal1",
+            "app_metadata": {"provider": "email", "providers": ["email"]},
+            "user_metadata": {"full_name": "Test Student"},
+            "is_anonymous": False,
+        },
+    )
+    with patch("app.api.deps._fetch_jwks", return_value=jwks):
+        response = client.get(
+            f"/api/v1/attendance/{uuid.uuid4()}/summary",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    assert response.status_code == 200

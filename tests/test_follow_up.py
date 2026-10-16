@@ -149,6 +149,36 @@ def fixed_rules(monkeypatch):
     monkeypatch.setattr(fu, "get_followup_evaluation_window_days", window)
 
 
+def make_plan(
+    case,
+    *,
+    decision: str | None = "APPROVED",
+    actions=None,
+    reasons=None,
+) -> InterventionPlan:
+    """Approved intervention plan fixture (ADR-004 §2.5 predicate input)."""
+    now = datetime.now(UTC)
+    return InterventionPlan(
+        id=uuid.uuid4(),
+        case_id=case.id,
+        created_by="SYSTEM_AGENT",
+        status="ACCEPTED",
+        plan_actions=actions if actions is not None else [{"type": "ATTEND_CLASS"}],
+        reason_codes=reasons if reasons is not None else ["LOW_ATTENDANCE"],
+        evidence=[],
+        mentor_decision=decision,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _attendance_rows(attended, conducted, band="SAFE"):
+    """Single rows-query result for check_improvement (F2: one query)."""
+    if attended is None and conducted is None:
+        return FakeResult(rows=[])
+    return FakeResult(rows=[(attended, conducted, band)])
+
+
 # ---- drift guards (catalog / ADR constants) --------------------------------
 
 
@@ -392,17 +422,32 @@ async def test_duplicate_due_dispatch_is_noop_after_fulfilment():
 # ---- DUE fulfilment ---------------------------------------------------------
 
 
-def _due_session(case, follow_up, *, attended=None, conducted=None, plans=None, conflict=False):
-    """Execute() side effects for lock-followup → lock-case → improvement check."""
-    return make_session(
-        [
-            FakeResult(scalar=follow_up),  # lock follow-up
-            FakeResult(scalar=case),  # lock case
-            FakeResult(first=(uuid.uuid4(),) if conflict else None),  # conflict band
-            FakeResult(one=(attended, conducted)),  # aggregate attendance
-            FakeResult(scalars_list=plans or []),  # plans
-        ]
-    )
+def _due_session(
+    case,
+    follow_up,
+    *,
+    attended=None,
+    conducted=None,
+    band="SAFE",
+    plans=None,
+    task_statuses=None,
+    stale=None,
+):
+    """Execute() side effects: lock-followup → lock-case → stale-sibling scan
+    → attendance rows → plans [→ materialized task statuses when an approved
+    plan exists]."""
+    results = [
+        FakeResult(scalar=follow_up),  # lock follow-up
+        FakeResult(scalar=case),  # lock case
+        FakeResult(scalars_list=stale or []),  # stale siblings (supersession)
+        _attendance_rows(attended, conducted, band),  # derived-state rows
+        FakeResult(scalars_list=plans or []),  # plans
+    ]
+    if any(
+        p.mentor_decision in {"APPROVED", "EDITED"} for p in (plans or [])
+    ):
+        results.append(FakeResult(scalars_list=task_statuses or []))
+    return make_session(results)
 
 
 async def test_due_not_improved_fulfils_to_monitoring(fixed_rules):
@@ -435,7 +480,15 @@ async def test_due_improved_resolves_immediately(fixed_rules):
     follow_up = make_follow_up(
         case_id=case.id, due_at=datetime.now(UTC) - timedelta(minutes=1)
     )
-    session = _due_session(case, follow_up, attended=90, conducted=100)
+    approved = make_plan(case)
+    session = _due_session(
+        case,
+        follow_up,
+        attended=90,
+        conducted=100,
+        plans=[approved],
+        task_statuses=["COMPLETED"],
+    )
 
     outcome = await handle_followup_due_event(session, followup_event(follow_up))
 
@@ -448,9 +501,13 @@ async def test_due_improved_resolves_immediately(fixed_rules):
     assert audit_actions == ["CASE_FOLLOWUP_DUE", "CASE_IMPROVEMENT_VERIFIED"]
 
 
-async def test_due_case_moved_is_noop_and_rolls_back(fixed_rules):
-    """Case left ACTIVE before the consumer ran (e.g. concurrent mentor
-    action) → no-op, session rolled back, follow-up untouched."""
+async def test_due_case_moved_cancels_stale_scheduled(fixed_rules):
+    """Branch (a) of the ADR-004 §2.1 consumption rule: the case left ACTIVE
+    before the DUE dispatch landed (e.g. concurrent mentor action / a peer
+    follow-up already drove the transition) → the stale SCHEDULED row is
+    CANCELLED (audit FOLLOW_UP_SUPERSEDED) instead of lingering SCHEDULED
+    behind an already-EMITTED occurrence. No case transition, no rollback —
+    the cancellation commits."""
     case = make_case(status=InterventionCaseStatus.REPLAN_REQUIRED)
     follow_up = make_follow_up(
         case_id=case.id, due_at=datetime.now(UTC) - timedelta(minutes=1)
@@ -461,24 +518,114 @@ async def test_due_case_moved_is_noop_and_rolls_back(fixed_rules):
 
     outcome = await handle_followup_due_event(session, followup_event(follow_up))
 
+    assert outcome.action == "cancelled"
+    assert outcome.case_status == InterventionCaseStatus.REPLAN_REQUIRED.value
+    assert follow_up.status == FollowUpStatus.CANCELLED.value
+    assert case.status == InterventionCaseStatus.REPLAN_REQUIRED  # untouched
+    audit_actions = [c[0][0].action_type for c in session.add.call_args_list]
+    assert audit_actions == ["FOLLOW_UP_SUPERSEDED"]
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()
+
+
+async def test_due_cancelled_follow_up_is_noop(fixed_rules):
+    """A CANCELLED row is terminal — a duplicate/late DUE dispatch no-ops."""
+    case = make_case(status=InterventionCaseStatus.MONITORING)
+    follow_up = make_follow_up(
+        case_id=case.id, status=FollowUpStatus.CANCELLED,
+        due_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    session = make_session([FakeResult(scalar=follow_up)])
+
+    outcome = await handle_followup_due_event(session, followup_event(follow_up))
+
     assert outcome.action == "noop"
-    session.rollback.assert_awaited()
-    assert follow_up.status == FollowUpStatus.SCHEDULED.value
+    session.commit.assert_not_awaited()
+
+
+async def test_fulfilment_cancels_stale_siblings(fixed_rules):
+    """Branch (b): one fulfilment per case cycle — competing SCHEDULED
+    siblings are CANCELLED in the same transaction (audit order:
+    FOLLOW_UP_SUPERSEDED … then CASE_FOLLOWUP_DUE)."""
+    case = make_case()
+    follow_up = make_follow_up(
+        case_id=case.id, due_at=datetime.now(UTC) - timedelta(minutes=1)
+    )
+    sibling = make_follow_up(
+        case_id=case.id, trigger_type=FollowUpTriggerType.ATTENDANCE_INTERVENTION.value
+    )
+    session = _due_session(case, follow_up, stale=[sibling])
+
+    outcome = await handle_followup_due_event(session, followup_event(follow_up))
+
+    assert outcome.action == "fulfilled"
+    assert follow_up.status == FollowUpStatus.FULFILLED.value
+    assert sibling.status == FollowUpStatus.CANCELLED.value
+    audit_actions = [c[0][0].action_type for c in session.add.call_args_list]
+    assert audit_actions == ["FOLLOW_UP_SUPERSEDED", "CASE_FOLLOWUP_DUE"]
+    session.commit.assert_awaited_once()
+
+
+async def test_policy_event_same_case_second_sibling_noops(fixed_rules):
+    """Event path scanning two SCHEDULED rows of one case: the first
+    fulfils (and cancels the second in-transaction) — the loop sees the
+    mutated sibling and appends noop; outcomes = [fulfilled, noop]."""
+    case = make_case()
+    first = make_follow_up(
+        case_id=case.id,
+        trigger_type=FollowUpTriggerType.ATTENDANCE_INTERVENTION.value,
+    )
+    second = make_follow_up(
+        case_id=case.id,
+        trigger_type=FollowUpTriggerType.ATTENDANCE_INTERVENTION.value,
+    )
+    session = make_session(
+        [
+            FakeResult(scalars_list=[first, second]),  # scan (both ACTIVE)
+            FakeResult(scalar=case),  # lock case (_fulfil_due for first)
+            FakeResult(scalars_list=[second]),  # stale sibling scan
+            _attendance_rows(50, 100),
+            FakeResult(scalars_list=[]),  # plans
+        ]
+    )
+    event = DomainEvent(
+        event_type=EVENT_ATTENDANCE_UPDATED,
+        student_id=case.student_id,
+        source_id=uuid.uuid4(),
+        payload={},
+    )
+
+    outcomes = await handle_policy_event(session, event)
+
+    assert [o.action for o in outcomes] == ["fulfilled", "noop"]
+    assert first.status == FollowUpStatus.FULFILLED.value
+    assert second.status == FollowUpStatus.CANCELLED.value
 
 
 # ---- EXPIRY -----------------------------------------------------------------
 
 
-def _expiry_session(case, follow_up, *, attended=None, conducted=None):
-    return make_session(
-        [
-            FakeResult(scalar=follow_up),
-            FakeResult(scalar=case),
-            FakeResult(first=None),
-            FakeResult(one=(attended, conducted)),
-            FakeResult(scalars_list=[]),
-        ]
-    )
+def _expiry_session(
+    case,
+    follow_up,
+    *,
+    attended=None,
+    conducted=None,
+    band="SAFE",
+    plans=None,
+    task_statuses=None,
+):
+    results = [
+        FakeResult(scalar=follow_up),
+        FakeResult(scalar=case),
+        _attendance_rows(attended, conducted, band),
+        FakeResult(scalars_list=plans or []),
+    ]
+    if any(
+        p.mentor_decision in {"APPROVED", "EDITED"} for p in (plans or [])
+    ):
+        results.append(FakeResult(scalars_list=task_statuses or []))
+    return make_session(results)
 
 
 async def test_expiry_not_improved_returns_to_replan(fixed_rules):
@@ -513,7 +660,15 @@ async def test_expiry_improved_resolves(fixed_rules):
         status=FollowUpStatus.FULFILLED,
         window_end=datetime.now(UTC) - timedelta(minutes=1),
     )
-    session = _expiry_session(case, follow_up, attended=80, conducted=100)
+    approved = make_plan(case)
+    session = _expiry_session(
+        case,
+        follow_up,
+        attended=80,
+        conducted=100,
+        plans=[approved],
+        task_statuses=["COMPLETED"],
+    )
 
     outcome = await handle_followup_due_event(
         session, followup_event(follow_up, phase="EXPIRY")
@@ -570,8 +725,8 @@ async def test_attendance_updated_fulfils_attendance_follow_up(fixed_rules):
         [
             FakeResult(scalars_list=[follow_up]),  # scan (SCHEDULED + ACTIVE case)
             FakeResult(scalar=case),  # lock case (_fulfil_due)
-            FakeResult(first=None),  # conflict
-            FakeResult(one=(50, 100)),  # below threshold
+            FakeResult(scalars_list=[]),  # stale siblings
+            _attendance_rows(50, 100),  # below threshold
             FakeResult(scalars_list=[]),  # plans
         ]
     )
@@ -601,8 +756,8 @@ async def test_study_events_fulfil_study_follow_up(fixed_rules):
             [
                 FakeResult(scalars_list=[follow_up]),
                 FakeResult(scalar=case),
-                FakeResult(first=None),
-                FakeResult(one=(10, 100)),
+                FakeResult(scalars_list=[]),  # stale siblings
+                _attendance_rows(10, 100),
                 FakeResult(scalars_list=[]),
             ]
         )
@@ -628,8 +783,8 @@ async def test_task_overdue_fulfils_assignment_follow_up(fixed_rules):
         [
             FakeResult(scalars_list=[follow_up]),
             FakeResult(scalar=case),
-            FakeResult(first=None),
-            FakeResult(one=(10, 100)),
+            FakeResult(scalars_list=[]),  # stale siblings
+            _attendance_rows(10, 100),
             FakeResult(scalars_list=[]),
         ]
     )
@@ -664,16 +819,13 @@ async def test_policy_event_scan_requires_active_case():
 # ---- improvement predicate (direct) ----------------------------------------
 
 
-async def test_improvement_no_attendance_data_not_verified(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+async def test_improvement_no_attendance_data_not_verified(fixed_rules):
+    """No derived rows → attendance not verified; with no approved plan the
+    task/reason legs fail closed too (ADR-004 §2.5, no vacuous pass)."""
     case = make_case()
     session = make_session(
         [
-            FakeResult(first=None),  # conflict
-            FakeResult(one=(None, None)),  # no derived rows
+            _attendance_rows(None, None),  # no derived rows
             FakeResult(scalars_list=[]),  # plans
         ]
     )
@@ -681,21 +833,34 @@ async def test_improvement_no_attendance_data_not_verified(monkeypatch):
     check = await check_improvement(session, case=case)
 
     assert check.attendance_ok is False
-    assert check.tasks_ok is True  # vacuous
+    assert check.risk_cleared is True  # no risky rows — attendance gates anyway
+    assert check.tasks_ok is False  # fail-closed: no approved plan
+    assert check.reasons_ok is False
     assert check.verified is False
     assert check.attendance_percent is None
 
 
-async def test_improvement_conflict_band_blocks_verification(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+async def test_improvement_conflict_band_blocks_verification(fixed_rules):
     case = make_case()
     session = make_session(
         [
-            FakeResult(first=(uuid.uuid4(),)),  # DATA_CONFLICT band present
-            FakeResult(one=(90, 100)),
+            _attendance_rows(90, 100, band="DATA_CONFLICT"),
+            FakeResult(scalars_list=[]),
+        ]
+    )
+
+    check = await check_improvement(session, case=case)
+
+    assert check.attendance_ok is False
+    assert check.verified is False
+    assert check.attendance_percent is None  # conflict is never aggregated
+
+
+async def test_improvement_below_threshold_not_verified(fixed_rules):
+    case = make_case()
+    session = make_session(
+        [
+            _attendance_rows(60, 100),
             FakeResult(scalars_list=[]),
         ]
     )
@@ -706,80 +871,60 @@ async def test_improvement_conflict_band_blocks_verification(monkeypatch):
     assert check.verified is False
 
 
-async def test_improvement_below_threshold_not_verified(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+async def test_improvement_above_threshold_without_approved_plan_not_verified(fixed_rules):
+    """Attendance alone can never resolve a case: the approved plan and its
+    reason codes are required (PENDING_APPROVAL → ACTIVE is the approval)."""
     case = make_case()
     session = make_session(
         [
-            FakeResult(first=None),
-            FakeResult(one=(60, 100)),
-            FakeResult(scalars_list=[]),
+            _attendance_rows(90, 100),
+            FakeResult(scalars_list=[]),  # no plan at all
         ]
     )
 
     check = await check_improvement(session, case=case)
 
-    assert check.attendance_ok is False
+    assert check.attendance_ok is True
+    assert check.risk_cleared is True
+    assert check.tasks_ok is False
+    assert check.reasons_ok is False
     assert check.verified is False
 
 
-async def test_improvement_above_threshold_no_plan_verified(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+@pytest.mark.parametrize("band", ["WARNING", "CRITICAL"])
+async def test_improvement_active_risk_band_blocks_verification(fixed_rules, band):
+    """Regression: an aggregate above threshold must NOT verify while any
+    derived row still carries the original risk band — the ORIGINAL risk
+    must be cleared (per-course-run bands can mask a still-at-risk run)."""
     case = make_case()
+    approved = make_plan(case)
     session = make_session(
         [
-            FakeResult(first=None),
-            FakeResult(one=(90, 100)),
-            FakeResult(scalars_list=[]),  # no approved plan → tasks vacuous
+            _attendance_rows(90, 100, band=band),  # 90% >= 75% but still risky
+            FakeResult(scalars_list=[approved]),
+            FakeResult(scalars_list=["COMPLETED"]),
         ]
     )
 
     check = await check_improvement(session, case=case)
 
-    assert check.verified is True
+    assert check.attendance_ok is True
+    assert check.risk_cleared is False
+    assert check.reasons_ok is False  # LOW_ATTENDANCE needs risk cleared
+    assert check.verified is False
 
 
-async def test_improvement_pending_plan_task_blocks_verification(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+async def test_improvement_zero_materialized_tasks_not_verified(fixed_rules):
+    """Regression: a plan whose actions were never materialized as
+    StudentTask rows must not vacuously pass (vacuous truth was ADR
+    §2.5's documented gap — now closed)."""
     case = make_case()
-    approved = InterventionPlan(
-        id=uuid.uuid4(),
-        case_id=case.id,
-        created_by="SYSTEM_AGENT",
-        status="ACCEPTED",
-        plan_actions=[],
-        reason_codes=[],
-        evidence=[],
-        mentor_decision="APPROVED",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
-    )
+    approved = make_plan(case, actions=[{"type": "ATTEND_CLASS"}])
     session = make_session(
         [
-            FakeResult(first=None),
-            FakeResult(one=(90, 100)),
+            _attendance_rows(90, 100),
             FakeResult(scalars_list=[approved]),
-        ]
-    )
-    # Patch the pending-task count query result via a second execute chain:
-    # check_improvement issues one more execute for the task count.
-    count_result = MagicMock()
-    count_result.scalar.return_value = 1
-    session.execute = AsyncMock(
-        side_effect=[
-            FakeResult(first=None),
-            FakeResult(one=(90, 100)),
-            FakeResult(scalars_list=[approved]),
-            count_result,
+            FakeResult(scalars_list=[]),  # nothing materialized
         ]
     )
 
@@ -789,40 +934,77 @@ async def test_improvement_pending_plan_task_blocks_verification(monkeypatch):
     assert check.verified is False
 
 
-async def test_improvement_completed_plan_tasks_ok(monkeypatch):
-    async def threshold(_s, _i):
-        return Decimal("75.00")
-
-    monkeypatch.setattr(fu, "get_attendance_threshold", threshold)
+async def test_improvement_partial_materialization_not_verified(fixed_rules):
     case = make_case()
-    approved = InterventionPlan(
-        id=uuid.uuid4(),
-        case_id=case.id,
-        created_by="SYSTEM_AGENT",
-        status="ACCEPTED",
-        plan_actions=[],
-        reason_codes=[],
-        evidence=[],
-        mentor_decision="EDITED",
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+    approved = make_plan(
+        case, actions=[{"type": "ATTEND_CLASS"}, {"type": "DAILY_QUIZ"}]
     )
-    count_result = MagicMock()
-    count_result.scalar.return_value = 0
-    session = make_session()
-    session.execute = AsyncMock(
-        side_effect=[
-            FakeResult(first=None),
-            FakeResult(one=(90, 100)),
+    session = make_session(
+        [
+            _attendance_rows(90, 100),
             FakeResult(scalars_list=[approved]),
-            count_result,
+            FakeResult(scalars_list=["COMPLETED"]),  # only 1 of 2 actions
+        ]
+    )
+
+    check = await check_improvement(session, case=case)
+
+    assert check.tasks_ok is False
+    assert check.verified is False
+
+
+async def test_improvement_pending_plan_task_blocks_verification(fixed_rules):
+    case = make_case()
+    approved = make_plan(case)
+    session = make_session(
+        [
+            _attendance_rows(90, 100),
+            FakeResult(scalars_list=[approved]),
+            FakeResult(scalars_list=["PENDING"]),  # materialized but open
+        ]
+    )
+
+    check = await check_improvement(session, case=case)
+
+    assert check.tasks_ok is False
+    assert check.verified is False
+
+
+async def test_improvement_completed_plan_tasks_ok(fixed_rules):
+    case = make_case()
+    approved = make_plan(case, decision="EDITED")
+    session = make_session(
+        [
+            _attendance_rows(90, 100),
+            FakeResult(scalars_list=[approved]),
+            FakeResult(scalars_list=["COMPLETED"]),
         ]
     )
 
     check = await check_improvement(session, case=case)
 
     assert check.tasks_ok is True
+    assert check.reasons_ok is True
     assert check.verified is True
+
+
+async def test_improvement_unknown_reason_code_blocks_verification(fixed_rules):
+    """A reason code outside the evaluable vocabulary fails closed —
+    verified never rests on an unevidenced assumption (ADR-004 §2.5)."""
+    case = make_case()
+    approved = make_plan(case, reasons=["SOME_FUTURE_CODE"])
+    session = make_session(
+        [
+            _attendance_rows(90, 100),
+            FakeResult(scalars_list=[approved]),
+            FakeResult(scalars_list=["COMPLETED"]),
+        ]
+    )
+
+    check = await check_improvement(session, case=case)
+
+    assert check.reasons_ok is False
+    assert check.verified is False
 
 
 # ---- FollowUpConsumer -------------------------------------------------------

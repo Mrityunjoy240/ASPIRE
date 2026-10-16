@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import (
     get_auth_context,
     get_event_bus,
-    require_mentor_or_admin,
+    require_mentor_hod_or_admin,
     require_roles,
     get_session,
 )
@@ -53,7 +53,7 @@ router = APIRouter(prefix="/api/v1/cases", tags=["Intervention Cases"])
     "/queue",
     response_model=list[CaseQueueItemResponse],
     summary="Mentor priority triage queue",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
 )
 async def get_mentor_queue(
     auth = Depends(get_auth_context),
@@ -61,13 +61,16 @@ async def get_mentor_queue(
 ):
     """Mentor queue ordered by Urgency Band → Exam Proximity → Days Since Last Action (DM-SS03)."""
 
-    # Mentors see only their assigned cases. Admin (all cases) and HOD are
-    # scoped to their own institution (07 §2: Admin = all WITHIN own
-    # institution; student->institution resolves through batch_id — 003/004).
-    # ESCALATION_REQUIRED is included (02 §2.1/§2.2: the mentor sees the
-    # escalation flag and HOD reviews escalated cases). A NULL
-    # institution_id matches nothing (fail closed).
-    if auth.is_admin() or auth.has_role(UserRole.HOD):
+    # Mentors see only their assigned cases. Admin sees all cases within
+    # their own institution. HOD sees **escalations only**, within their
+    # own institution (07 §2 permission matrix: Admin = "All",
+    # HOD = "Escalations" — review F5; `ESCALATION_REQUIRED` is itself the
+    # pending-HOD/CT marker, 03 §10.2 / `escalate_case`). Student ->
+    # institution resolves through batch_id (003/004). A NULL
+    # institution_id matches nothing (fail closed). ESCALATION_REQUIRED
+    # stays in the admin/mentor lists (02 §2.1/§2.2: the mentor sees the
+    # escalation flag; admin sees everything).
+    if auth.is_admin():
         result = await session.execute(
             select(InterventionCase)
             .join(StudentProfile, InterventionCase.student_id == StudentProfile.id)
@@ -84,6 +87,16 @@ async def get_mentor_queue(
                 InterventionCaseStatus.REPLAN_REQUIRED,
                 InterventionCaseStatus.ESCALATION_REQUIRED,
             ]))
+        )
+    elif auth.has_role(UserRole.HOD):
+        result = await session.execute(
+            select(InterventionCase)
+            .join(StudentProfile, InterventionCase.student_id == StudentProfile.id)
+            .join(Batch, StudentProfile.batch_id == Batch.id)
+            .where(
+                Batch.institution_id == auth.institution_id,
+                InterventionCase.status == InterventionCaseStatus.ESCALATION_REQUIRED,
+            )
         )
     else:
         # Mentor sees only their assigned cases
@@ -202,12 +215,20 @@ async def _authorize_mentor_case_write(
     auth, session: AsyncSession, case: InterventionCase
 ) -> None:
     """Record-level authorization for a mentor case write (07 §2): the
-    assigned mentor always qualifies; admin/HOD qualify only inside their
-    own institution (student -> batch -> institution). Every refusal uses
-    the same detail (no scope oracle). Shared by approve/close/escalate."""
+    assigned mentor always qualifies; admin qualifies inside their own
+    institution (student -> batch -> institution); HOD qualifies **only on
+    `ESCALATION_REQUIRED` cases** inside their own institution (07 §2
+    matrix "HOD: Escalations" — review F5; that status is the
+    pending-HOD/CT marker, 03 §10.2). Every refusal uses the same detail
+    (no scope oracle). Shared by approve/close/escalate/follow-ups."""
     if case.mentor_id == auth.user_id:
         return
     if not (auth.is_admin() or auth.has_role(UserRole.HOD)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized for this case",
+        )
+    if not auth.is_admin() and case.status != InterventionCaseStatus.ESCALATION_REQUIRED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized for this case",
@@ -229,7 +250,7 @@ async def _authorize_mentor_case_write(
     "/{case_id}/approve",
     response_model=CaseApproveResponse,
     summary="Mentor human-in-the-loop approval",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
@@ -373,7 +394,7 @@ async def student_plan_decision(
     "/{case_id}/escalate",
     response_model=CaseEscalateResponse,
     summary="Mentor escalates an ESCALATION_REQUIRED case to HOD/CT",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
@@ -431,7 +452,7 @@ async def escalate_case_endpoint(
     "/{case_id}/close",
     response_model=CaseCloseResponse,
     summary="Mentor closes a RESOLVED case",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
     responses={
         status.HTTP_409_CONFLICT: {
             "description": (
@@ -481,7 +502,7 @@ async def close_case_endpoint(
     response_model=FollowUpCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Mentor schedules a follow-up on an ACTIVE case",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
     responses={
         status.HTTP_409_CONFLICT: {
             "description": "Case not in ACTIVE (ADR-004 §2.7)",
@@ -542,7 +563,7 @@ async def create_follow_up(
     "/{case_id}/follow-ups",
     response_model=list[FollowUpResponse],
     summary="List follow-ups for a case",
-    dependencies=[Depends(require_mentor_or_admin)],
+    dependencies=[Depends(require_mentor_hod_or_admin)],
 )
 async def list_follow_ups(
     case_id: UUID,

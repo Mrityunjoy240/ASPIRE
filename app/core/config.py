@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     next_public_supabase_url: str = ""
     next_public_supabase_publishable_key: str = ""
     supabase_jwks_uri: str = ""
+    # JWT validation contract (07 §1): explicit `aud`/`iss` configuration —
+    # NEVER the publishable key (a client API key is not a token audience).
+    # Audience defaults to Supabase's documented access-token audience;
+    # an empty issuer derives {NEXT_PUBLIC_SUPABASE_URL}/auth/v1. Both fail
+    # closed (401) when they cannot be resolved at validation time.
+    supabase_jwt_audience: str = "authenticated"
+    supabase_jwt_issuer: str = ""
 
     # App
     app_env: Literal["development", "staging", "production"] = "development"

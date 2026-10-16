@@ -20,15 +20,16 @@
 - **JWT validation (FastAPI, asymmetric JWKS):**
   - Signature verified against the Supabase project's JWKS — asymmetric, no shared secret. `SUPABASE_JWT_SECRET` is not used, and JWKS verification requires no Supabase API secret.
   - **JWKS source (frozen):** development/test uses the **local Supabase Auth JWKS endpoint** (Supabase CLI local stack, via `SUPABASE_JWKS_URI`); production uses the production Supabase project's JWKS endpoint. The validation rules below are identical in every environment and are never weakened.
-  - `iss` (issuer) must match the Supabase project
-  - `aud` (audience) must match the expected audience of the chosen Supabase token configuration
-  - `exp` (expiration) must be in the future
-  - `sub` (subject) must be present and identifies the Supabase user
+  - `iss` (issuer) must match the Supabase project — validated against `SUPABASE_JWT_ISSUER` (default derived: `{NEXT_PUBLIC_SUPABASE_URL}/auth/v1`); unresolvable configuration is refused (401), never skipped
+  - `aud` (audience) must match the expected audience of the chosen Supabase token configuration — validated against `SUPABASE_JWT_AUDIENCE` (default: `authenticated`); the publishable key is a client API key and is **never** used as a token audience
+  - `exp` (expiration) must be in the future and must be present (`require_exp`)
+  - `sub` (subject) must be present and identifies the Supabase user (missing/invalid claims are 401, not 500)
   - `nbf` / `iat` validated where applicable to the chosen Supabase token configuration
+  - Signing keys are accepted only from the JWKS as RSA/RS256 signature keys (`kty=RSA`, `alg=RS256`, `use=sig`, ≥ 2048-bit modulus); `none`/HMAC algorithm confusion is refused by the pinned `RS256` allowlist
 - **Session lifetime:** Access-token and session lifetime follow the configured Supabase Auth settings. Supabase manages the refresh/session lifecycle — ASPIRE does not independently manage token lifetime.
 - Passwords are never stored. Supabase handles credential management.
 - No server secret key is ever exposed to a frontend (Constitution S-05).
-- **Key least-privilege principle (frozen):** public client configuration is `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the backend reads `SUPABASE_JWKS_URI`. Legacy names (`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) are not used. No `SUPABASE_SECRET_KEY` is provisioned unless a concrete ASPIRE backend requirement actually needs a privileged Supabase API operation — elevated, RLS-bypassing credentials are never created "just in case".
+- **Key least-privilege principle (frozen):** public client configuration is `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`; the backend reads `SUPABASE_JWKS_URI`, `SUPABASE_JWT_AUDIENCE` and `SUPABASE_JWT_ISSUER` (validation configuration only — no secrets). Legacy names (`SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) are not used. No `SUPABASE_SECRET_KEY` is provisioned unless a concrete ASPIRE backend requirement actually needs a privileged Supabase API operation — elevated, RLS-bypassing credentials are never created "just in case".
 
 ---
 
@@ -82,6 +83,20 @@ USING (
 | Institution config | — | — | — | — | — | ✅ All |
 | Import data | — | — | — | — | — | ✅ All |
 | Audit log | — | — | — | — | — | ✅ Read |
+
+**Intervention-case scoping (clarified 16 Oct 2026, review F5):** the HOD cell
+"Escalations" means cases in **`ESCALATION_REQUIRED` only** — that status *is*
+the pending-HOD/CT marker (03 §10.2 self-transition; the target is recorded on
+the `CASE_ESCALATED` audit row — there is no `escalated_to` schema column). Both
+layers enforce it (this section's two-layer rule): the queue's HOD branch
+filters to `ESCALATION_REQUIRED` within the HOD's own institution
+(student → batch → institution), and the record-level case-write check refuses
+HOD on any other status with the shared "Not authorized for this case" detail
+(no scope oracle). Admin keeps institution-scoped access to all non-terminal
+statuses; mentors keep own-assigned cases. HOD *actions* on escalated cases
+(acknowledge/resolve transitions) are **not implemented yet** — HOD reach today
+is escalation visibility plus the record-level pass; a dedicated HOD transition
+is future work.
 
 ---
 

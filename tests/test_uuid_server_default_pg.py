@@ -6,6 +6,8 @@
 # app/models/audit.py). Verified against real PostgreSQL: insert without id
 # -> persisted generated UUID -> reload by that id -> distinct second id ->
 # explicit id still accepted. DSN guard: tests/conftest.py.
+# Review F6 (16 Oct 2026) extends the same live verification to
+# intervention_follow_ups.id (migration 017 additive ALTER default).
 
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conflicts import DataConflict
+from app.models.intervention import InterventionFollowUp
 from app.models.rules import InstitutionRule
 
 pytestmark = pytest.mark.integration
@@ -50,6 +53,17 @@ def _new_rule(institution_id: uuid.UUID, **overrides) -> InstitutionRule:
     )
     payload.update(overrides)
     return InstitutionRule(**payload)
+
+
+def _new_follow_up(case_id: uuid.UUID, **overrides) -> InterventionFollowUp:
+    payload = dict(
+        case_id=case_id,
+        trigger_type="ATTENDANCE_INTERVENTION",  # event-driven: due_at NULL
+        created_by="SYSTEM",
+        created_at=datetime.now(UTC),
+    )
+    payload.update(overrides)
+    return InterventionFollowUp(**payload)
 
 
 async def _read(engine, model, row_id):
@@ -137,4 +151,41 @@ async def test_institution_rule_id_generated_by_database(pg_engine, pg_seed):
         session.add(third)
         await session.commit()
     row = await _read(pg_engine, InstitutionRule, explicit)
+    assert row.id == explicit
+
+
+async def test_intervention_follow_up_id_generated_by_database(pg_engine, pg_seed):
+    # 1) insert through the ORM without supplying an id
+    follow_up = _new_follow_up(pg_seed.case_id)
+    assert follow_up.id is None  # never set client-side
+    async with AsyncSession(pg_engine, expire_on_commit=False) as session:
+        session.add(follow_up)
+        await session.flush()  # RETURNING restores the identity
+        generated = follow_up.id
+        await session.commit()
+    assert isinstance(generated, UUID)
+    assert generated is not None
+
+    # 2) reload using the generated id
+    row = await _read(pg_engine, InterventionFollowUp, generated)
+    assert row.id == generated
+    assert row.status == "SCHEDULED"
+    assert row.trigger_type == "ATTENDANCE_INTERVENTION"
+    assert row.due_at is None
+
+    # 3) another insert gets a distinct UUID
+    second = _new_follow_up(pg_seed.case_id)
+    async with AsyncSession(pg_engine, expire_on_commit=False) as session:
+        session.add(second)
+        await session.commit()
+    assert second.id is not None
+    assert second.id != generated
+
+    # 4) explicit id remains compatible
+    explicit = uuid.uuid4()
+    third = _new_follow_up(pg_seed.case_id, id=explicit)
+    async with AsyncSession(pg_engine, expire_on_commit=False) as session:
+        session.add(third)
+        await session.commit()
+    row = await _read(pg_engine, InterventionFollowUp, explicit)
     assert row.id == explicit

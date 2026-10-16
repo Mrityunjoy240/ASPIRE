@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -85,9 +85,10 @@ class InterventionPlan(Base):
 
 
 class InterventionFollowUp(Base):
-    """Follow-up row (migration 016, ADR-004 / 05 §9).
+    """Follow-up row (migrations 016 + 017, ADR-004 / 05 §9).
 
-    Lifecycle SCHEDULED → FULFILLED → EVALUATED; the status flip under
+    Lifecycle SCHEDULED → FULFILLED → EVALUATED, or SCHEDULED → CANCELLED
+    (superseded sibling, ADR-004 Amendment 1); the status flip under
     SELECT ... FOR UPDATE is the durable consumer-side dedup. due_at is
     CUSTOM_DATE only; event-driven types carry NULL and are fulfilled by
     their policy trigger events (02 §2.1 Step 6).
@@ -95,7 +96,12 @@ class InterventionFollowUp(Base):
 
     __tablename__ = "intervention_follow_ups"
 
-    id: Mapped[UUID] = mapped_column(primary_key=True)
+    # DEC-03 pattern (review F6): server_default mirrors migration 017
+    # (DEFAULT gen_random_uuid()) so real-PostgreSQL inserts that omit id
+    # work — the ORM must not disagree with the schema authority.
+    id: Mapped[UUID] = mapped_column(
+        primary_key=True, server_default=text("gen_random_uuid()")
+    )
     case_id: Mapped[UUID] = mapped_column(
         ForeignKey("intervention_cases.id", ondelete="RESTRICT"), nullable=False
     )

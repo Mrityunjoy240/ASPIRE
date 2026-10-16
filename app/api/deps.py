@@ -61,8 +61,27 @@ def _fetch_jwks() -> JWKS:
     return JWKS.model_validate(resp.json())
 
 
+# Minimum RSA modulus accepted from the JWKS (bits). Supabase issues 2048+
+# keys; anything weaker is refused before it can be used to verify a token.
+_MIN_RSA_BITS = 2048
+
+
+def _resolve_jwt_issuer() -> str:
+    """Configured `iss` for Supabase JWTs (07 §1): explicit
+    SUPABASE_JWT_ISSUER wins; otherwise the documented GoTrue issuer
+    `{NEXT_PUBLIC_SUPABASE_URL}/auth/v1`. Empty when unresolvable."""
+    if settings.supabase_jwt_issuer:
+        return settings.supabase_jwt_issuer
+    base = settings.next_public_supabase_url.rstrip("/")
+    return f"{base}/auth/v1" if base else ""
+
+
 def _get_signing_key(token: str) -> str:
-    """Extract signing key from JWKS using token's kid header."""
+    """Extract signing key from JWKS using token's kid header.
+
+    The JWK is accepted only as a signature key: RSA modulus/exponent are
+    validated (kty/alg/use/size) before reconstruction — a non-RSA, non-sig
+    or short key from the document can never be turned into a verifier."""
     unverified_header = jwt.get_unverified_header(token)
     kid = unverified_header.get("kid")
     if not kid:
@@ -70,6 +89,12 @@ def _get_signing_key(token: str) -> str:
     jwks = _fetch_jwks()
     for key in jwks.keys:
         if key.kid == kid:
+            if key.kty != "RSA":
+                raise JWTError(f"Unsupported JWK key type '{key.kty}' for kid={kid}")
+            if key.alg != "RS256":
+                raise JWTError(f"Unsupported JWK alg '{key.alg}' for kid={kid}")
+            if key.use != "sig":
+                raise JWTError(f"JWK use '{key.use}' is not a signature key (kid={kid})")
             # Reconstruct PEM from JWK (RSA)
             from cryptography.hazmat.primitives import serialization
             from cryptography.hazmat.primitives.asymmetric import rsa
@@ -78,6 +103,10 @@ def _get_signing_key(token: str) -> str:
             # Construct public key from modulus and exponent
             n_int = int(n, 16)
             e_int = int(e, 16)
+            if n_int.bit_length() < _MIN_RSA_BITS:
+                raise JWTError(
+                    f"RSA key for kid={kid} is shorter than {_MIN_RSA_BITS} bits"
+                )
             pub_key = rsa.RSAPublicNumbers(e_int, n_int).public_key()
             pem = pub_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
@@ -88,18 +117,44 @@ def _get_signing_key(token: str) -> str:
 
 
 def _decode_token(token: str) -> TokenPayload:
-    """Validate and decode Supabase JWT using JWKS."""
+    """Validate and decode Supabase JWT using JWKS (07 §1).
+
+    Signature (RS256 only — never `none`/HMAC via header confusion), `iss`,
+    `aud`, `exp` (present and future), `nbf`/`iat` when present, and `sub`
+    presence are all enforced; validation configuration is explicit and
+    fails closed (401) instead of silently accepting."""
     try:
+        header = jwt.get_unverified_header(token)
+        if header.get("alg") != "RS256":
+            raise JWTError("Token alg must be RS256")
+        audience = settings.supabase_jwt_audience
+        if not audience:
+            raise JWTError("SUPABASE_JWT_AUDIENCE not configured")
+        issuer = _resolve_jwt_issuer()
+        if not issuer:
+            raise JWTError("SUPABASE_JWT_ISSUER not configured")
         key = _get_signing_key(token)
         payload = jwt.decode(
             token,
             key,
             algorithms=["RS256"],
-            audience=settings.next_public_supabase_publishable_key,
-            options={"verify_aud": True},
+            audience=audience,
+            issuer=issuer,
+            options={
+                "verify_signature": True,
+                "verify_aud": True,
+                "verify_iss": True,
+                "verify_exp": True,
+                "verify_nbf": True,
+                "verify_iat": True,
+                "require_exp": True,
+            },
         )
+        # TokenPayload requires sub/aud/iss/exp/iat — a missing/invalid
+        # claim raises pydantic ValidationError (a ValueError subclass) and
+        # is mapped to 401 below, never a 500.
         return TokenPayload.model_validate(payload)
-    except JWTError as e:
+    except (JWTError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {e}",
@@ -206,6 +261,21 @@ def require_admin(auth: AuthContext = Depends(get_auth_context)) -> AuthContext:
 def require_mentor_or_admin(auth: AuthContext = Depends(get_auth_context)) -> AuthContext:
     if not auth.has_role(UserRole.MENTOR, UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="Mentor or Admin role required")
+    return auth
+
+
+def require_mentor_hod_or_admin(auth: AuthContext = Depends(get_auth_context)) -> AuthContext:
+    """Intervention-case routes (07 §2 matrix: HOD sees escalations on
+    cases; `InterventionCaseStatus` records carry `HOD` in the escalation
+    path) — HOD is admitted at the ROUTE gate only; every case route also
+    runs the record-level `_authorize_mentor_case_write` helper (institution
+    scoping), so HOD reach is scoped exactly like admin reach. R5 left the
+    queue/case routes at `require_mentor_or_admin`, which made this helper
+    (and the §2 HOD row) dead code — review F5 closes that mismatch."""
+    if not auth.has_role(UserRole.MENTOR, UserRole.HOD, UserRole.ADMIN):
+        raise HTTPException(
+            status_code=403, detail="Mentor, HOD or Admin role required"
+        )
     return auth
 
 

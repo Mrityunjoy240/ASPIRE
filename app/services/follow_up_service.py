@@ -15,6 +15,10 @@
 #   - Event path: policy trigger events (ATTENDANCE_UPDATED /
 #     ASSESSMENT_GRADED / QUIZ_COMPLETED / TASK_OVERDUE) fulfil matching
 #     SCHEDULED follow-ups (02 §2.1 Step 6).
+# Follow-up row lifecycle additionally allows SCHEDULED → CANCELLED — the
+# multiple-follow-up consumption rule (ADR-004 §2.1 Option B): a dispatch
+# against a non-ACTIVE case cancels the stale row, and one fulfilment
+# cancels its same-case siblings (audit FOLLOW_UP_SUPERSEDED, §2.8).
 #
 # Idempotency (lead option A, ADR-004 §2.3): the follow-up row IS the
 # persisted logical identity. Every consumer path locks the row FOR UPDATE
@@ -32,7 +36,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.api.deps import log_audit
@@ -73,6 +77,7 @@ PHASE_EXPIRY = "EXPIRY"
 # 07 §4 is a mandatory minimum, not an exhaustive whitelist — these action
 # names are added by ADR-004 §2.8.
 AUDIT_FOLLOW_UP_SCHEDULED = "FOLLOW_UP_SCHEDULED"
+AUDIT_FOLLOW_UP_SUPERSEDED = "FOLLOW_UP_SUPERSEDED"
 AUDIT_CASE_FOLLOWUP_DUE = "CASE_FOLLOWUP_DUE"
 AUDIT_CASE_IMPROVEMENT_VERIFIED = "CASE_IMPROVEMENT_VERIFIED"
 AUDIT_CASE_FOLLOWUP_EXPIRED = "CASE_FOLLOWUP_EXPIRED"
@@ -80,6 +85,15 @@ AUDIT_CASE_FOLLOWUP_EXPIRED = "CASE_FOLLOWUP_EXPIRED"
 _SOURCE_SYSTEM = "CORE_PLATFORM"
 _APPROVED_MENTOR_DECISIONS = frozenset({"APPROVED", "EDITED"})
 _CONFLICT_BAND = "DATA_CONFLICT"
+# Attendance derived-state bands (attendance engine contract, ADR-004 §2.5):
+# a student row still WARNING/CRITICAL means the original risk is NOT yet
+# resolved — an aggregate percentage above threshold can mask a course run
+# that is still at risk.
+_RISK_BANDS = frozenset({"WARNING", "CRITICAL"})
+# Reason vocabulary that this predicate can evaluate today (06 §4 trigger
+# policies may fulfil follow-ups carrying other codes — those codes are
+# deferred to their owning contract and fail closed here).
+_REASON_LOW_ATTENDANCE = "LOW_ATTENDANCE"
 
 _VALID_TRIGGER_TYPES = frozenset(t.value for t in FollowUpTriggerType)
 
@@ -105,9 +119,17 @@ class FollowUpResult:
 
 @dataclass(frozen=True, slots=True)
 class ImprovementCheck:
+    """Result of the deterministic improvement predicate (02 §2.1 Step 7).
+
+    `verified` requires attendance_ok AND risk_cleared AND tasks_ok AND
+    reasons_ok — every declared reason for the intervention must hold.
+    """
+
     verified: bool
     attendance_ok: bool
+    risk_cleared: bool
     tasks_ok: bool
+    reasons_ok: bool
     attendance_percent: Decimal | None
     threshold: Decimal
 
@@ -116,7 +138,7 @@ class ImprovementCheck:
 class ConsumerOutcome:
     """One consumer processing result (asserted in unit/PG tests)."""
 
-    action: str  # noop | fulfilled | resolved | replan
+    action: str  # noop | fulfilled | resolved | replan | cancelled
     follow_up_id: UUID | None = None
     case_id: UUID | None = None
     case_status: str | None = None
@@ -218,37 +240,54 @@ async def check_improvement(
 ) -> ImprovementCheck:
     """Deterministic improvement predicate (02 §2.1 Step 7; ADR-004 §2.5).
 
-    Attendance: aggregate attended/conducted across ALL derived rows;
-    verified requires conducted > 0, no DATA_CONFLICT band, and aggregate
-    percentage >= institution threshold. No data / conflict → not verified
-    (fail-closed: the engine never invents academic facts).
-    Tasks: no non-COMPLETED AI_PLAN task linked to the case's approved plan
-    (vacuously true while plan→task materialization is unimplemented).
+    Attendance — ONE query over the student's derived rows (no conflict
+    pre-check + totals split):
+      * any DATA_CONFLICT row        → fail (engine never trusts a conflicted
+                                       aggregate; conflict is not a band to
+                                       paper over)
+      * aggregate attended/conducted → percentage requires conducted > 0;
+                                       no data → not verified (fail-closed)
+      * any row still WARNING/CRITICAL → risk_cleared False: the ORIGINAL
+                                       risk must be resolved, not merely an
+                                       aggregate above threshold
+      * attendance_ok = no conflict AND percentage >= institution threshold
+
+    Tasks — the case's APPROVED plan (mentor_decision APPROVED/EDITED) is
+    required (PENDING_APPROVAL → ACTIVE is the approval, so an ACTIVE case
+    always has one): every plan action must be materialized as a
+    StudentTask row (source_type=AI_PLAN, source_id=plan.id) and none may
+    be non-COMPLETED. Zero-materialized plans do NOT vacuously pass.
+    No approved plan → not verified.
+
+    Reasons — every approved-plan reason code must hold: LOW_ATTENDANCE
+    requires attendance_ok AND risk_cleared; an unknown/unevaluable code
+    fails closed. No approved plan → not verified.
     """
     threshold = await get_attendance_threshold(session, case.student_id)
 
-    conflict = await session.execute(
-        select(AttendanceDerivedState.id)
-        .where(
-            AttendanceDerivedState.student_id == case.student_id,
-            AttendanceDerivedState.risk_band == _CONFLICT_BAND,
-        )
-        .limit(1)
-    )
-    has_conflict = conflict.first() is not None
-
-    totals = await session.execute(
+    rows = await session.execute(
         select(
-            func.sum(AttendanceDerivedState.classes_attended),
-            func.sum(AttendanceDerivedState.classes_conducted),
+            AttendanceDerivedState.classes_attended,
+            AttendanceDerivedState.classes_conducted,
+            AttendanceDerivedState.risk_band,
         ).where(AttendanceDerivedState.student_id == case.student_id)
     )
-    attended, conducted = totals.one()
+    has_conflict = False
+    risk_cleared = True
+    attended_total = 0
+    conducted_total = 0
+    for attended, conducted, band in rows:
+        if band == _CONFLICT_BAND:
+            has_conflict = True
+        if band in _RISK_BANDS:
+            risk_cleared = False
+        attended_total += int(attended or 0)
+        conducted_total += int(conducted or 0)
 
     attendance_percent: Decimal | None = None
-    if not has_conflict and conducted is not None and int(conducted) > 0:
+    if not has_conflict and conducted_total > 0:
         attendance_percent = (
-            Decimal(int(attended or 0)) / Decimal(int(conducted))
+            Decimal(attended_total) / Decimal(conducted_total)
         ) * Decimal(100)
     attendance_ok = attendance_percent is not None and attendance_percent >= threshold
 
@@ -266,27 +305,48 @@ async def check_improvement(
         None,
     )
     if approved is None:
-        tasks_ok = True  # vacuous — no approved plan, hence no plan tasks
+        tasks_ok = False  # fail-closed — no approved plan, no verification
+        reasons_ok = False
     else:
-        pending = await session.execute(
-            select(func.count())
-            .select_from(StudentTask)
+        statuses = await session.execute(
+            select(StudentTask.status)
             .where(
                 StudentTask.student_id == case.student_id,
                 StudentTask.source_type == TaskSourceType.AI_PLAN,
                 StudentTask.source_id == approved.id,
-                StudentTask.status != TaskStatus.COMPLETED,
             )
         )
-        tasks_ok = int(pending.scalar() or 0) == 0
+        materialized = list(statuses.scalars())
+        planned = len(approved.plan_actions or [])
+        tasks_ok = len(materialized) >= planned and all(
+            _status_value(status) == TaskStatus.COMPLETED.value
+            for status in materialized
+        )
+        reasons_ok = all(
+            _reason_holds(
+                code, attendance_ok=attendance_ok, risk_cleared=risk_cleared
+            )
+            for code in (approved.reason_codes or [])
+        )
 
     return ImprovementCheck(
-        verified=attendance_ok and tasks_ok,
+        verified=attendance_ok and risk_cleared and tasks_ok and reasons_ok,
         attendance_ok=attendance_ok,
+        risk_cleared=risk_cleared,
         tasks_ok=tasks_ok,
+        reasons_ok=reasons_ok,
         attendance_percent=attendance_percent,
         threshold=threshold,
     )
+
+
+def _reason_holds(code: str, *, attendance_ok: bool, risk_cleared: bool) -> bool:
+    """Predicate for one approved-plan reason code (ADR-004 §2.5). Unknown
+    or not-yet-evaluable codes fail closed — verified means every declared
+    reason is demonstrably resolved."""
+    if code == _REASON_LOW_ATTENDANCE:
+        return attendance_ok and risk_cleared
+    return False
 
 
 async def handle_followup_due_event(
@@ -295,9 +355,11 @@ async def handle_followup_due_event(
     """MENTOR_FOLLOWUP_DUE consumer entry (scheduler-emitted, 03 §8.3).
 
     Row status is authoritative (payload `phase` is advisory): SCHEDULED →
-    due fulfilment; FULFILLED → expiry re-check once the evaluation window
-    has ended. Anything else (already EVALUATED, future CUSTOM_DATE, window
-    not ended) is a no-op — duplicate/early dispatch safe.
+    due fulfilment (with stale-sibling supersession; or CANCELLED when the
+    case is no longer ACTIVE — ADR-004 §2.1); FULFILLED → expiry re-check
+    once the evaluation window has ended. Anything else (already EVALUATED,
+    already CANCELLED, future CUSTOM_DATE, window not ended) is a no-op —
+    duplicate/early dispatch safe.
     """
     now = now if now is not None else datetime.now(UTC)
     locked = await session.execute(
@@ -357,7 +419,9 @@ async def handle_policy_event(
     outcomes: list[ConsumerOutcome] = []
     for follow_up in follow_ups:
         # Re-read under the lock in a fresh state — a concurrent dispatch
-        # may have flipped the row between the scan and this iteration.
+        # may have flipped the row between the scan and this iteration, and
+        # _fulfil_due cancels same-case siblings (they appear here already
+        # CANCELLED → noop).
         if _status_value(follow_up.status) != FollowUpStatus.SCHEDULED.value:
             outcomes.append(ConsumerOutcome(action="noop", follow_up_id=follow_up.id))
             continue
@@ -366,12 +430,85 @@ async def handle_policy_event(
     return outcomes
 
 
+async def _audit_superseded(
+    session: AsyncSession,
+    *,
+    follow_up: InterventionFollowUp,
+    reason: str,
+    case_status: str | None = None,
+) -> None:
+    """FOLLOW_UP_SUPERSEDED audit row for a CANCELLED follow-up (ADR-004
+    §2.8; 07 §4 — UUID/scalars-only state JSON)."""
+    new_state = {
+        "status": FollowUpStatus.CANCELLED.value,
+        "follow_up_id": str(follow_up.id),
+        "case_id": str(follow_up.case_id),
+        "reason": reason,
+    }
+    if case_status is not None:
+        new_state["case_status"] = case_status
+    await log_audit(
+        session,
+        actor_id=None,
+        actor_type="RULE_ENGINE",
+        action_type=AUDIT_FOLLOW_UP_SUPERSEDED,
+        entity_table="intervention_follow_ups",
+        entity_id=follow_up.id,
+        previous_state={
+            "status": FollowUpStatus.SCHEDULED.value,
+            "follow_up_id": str(follow_up.id),
+        },
+        new_state=new_state,
+        source_system=_SOURCE_SYSTEM,
+    )
+
+
+async def _cancel_stale_siblings(
+    session: AsyncSession, *, follow_up: InterventionFollowUp
+) -> int:
+    """Cancel every other SCHEDULED follow-up on this case (ADR-004 §2.1
+    Option B): exactly one follow-up drives a case cycle. SKIP LOCKED keeps
+    the lock order deadlock-safe against a concurrent txn holding a sibling
+    while waiting on this case row."""
+    stale = await session.execute(
+        select(InterventionFollowUp)
+        .where(
+            InterventionFollowUp.case_id == follow_up.case_id,
+            InterventionFollowUp.status == FollowUpStatus.SCHEDULED.value,
+            InterventionFollowUp.id != follow_up.id,
+        )
+        .order_by(InterventionFollowUp.created_at, InterventionFollowUp.id)
+        .with_for_update(skip_locked=True)
+    )
+    cancelled = 0
+    for sibling in stale.scalars():
+        sibling.status = FollowUpStatus.CANCELLED.value
+        cancelled += 1
+        await _audit_superseded(
+            session, follow_up=sibling, reason="superseded_by_fulfilment"
+        )
+    return cancelled
+
+
 async def _fulfil_due(
     session: AsyncSession, *, follow_up: InterventionFollowUp, now: datetime
 ) -> ConsumerOutcome:
     """SCHEDULED → FULFILLED + ACTIVE → MONITORING (+ immediate improvement
     check → maybe RESOLVED). One transaction: locks, transitions, audits,
-    commit (ADR-004 §2.4)."""
+    commit (ADR-004 §2.4).
+
+    Multiple-follow-up lifecycle (ADR-004 §2.1 Option B consumption rule):
+      * case no longer ACTIVE at dispatch → this SCHEDULED row can never
+        fulfil (a peer/mentor already moved the case): it is CANCELLED
+        (audit FOLLOW_UP_SUPERSEDED) instead of lingering SCHEDULED —
+        fixes the EMITTED-then-stale defect (the DUE condition does not
+        filter on case status, so every cycle would re-see it).
+      * case ACTIVE → after the case lock, all other SCHEDULED sibling
+        rows of this case are CANCELLED (SKIP LOCKED — the time path locks
+        fu→case while a concurrent txn may hold sibling→case): exactly one
+        follow-up drives a case cycle; stacked rows end terminal rather
+        than stale. Audits: SUPERSEDED… then CASE_FOLLOWUP_DUE.
+    """
     case_locked = await session.execute(
         select(InterventionCase)
         .where(InterventionCase.id == follow_up.case_id)
@@ -379,10 +516,29 @@ async def _fulfil_due(
     )
     case = case_locked.scalar_one_or_none()
     if case is None or _status_value(case.status) != InterventionCaseStatus.ACTIVE.value:
+        if _status_value(follow_up.status) == FollowUpStatus.SCHEDULED.value:
+            follow_up.status = FollowUpStatus.CANCELLED.value
+            await _audit_superseded(
+                session,
+                follow_up=follow_up,
+                reason="case_not_active",
+                case_status=(
+                    _status_value(case.status) if case is not None else None
+                ),
+            )
+            await session.commit()
+            return ConsumerOutcome(
+                action="cancelled",
+                follow_up_id=follow_up.id,
+                case_id=follow_up.case_id,
+                case_status=_status_value(case.status) if case is not None else None,
+            )
         await session.rollback()
         return ConsumerOutcome(
             action="noop", follow_up_id=follow_up.id, case_id=follow_up.case_id
         )
+
+    await _cancel_stale_siblings(session, follow_up=follow_up)
 
     window_days = await get_followup_evaluation_window_days(session, case.student_id)
 
@@ -566,7 +722,11 @@ class FollowUpConsumer:
                         "follow-up consumer: %s student_id=%s fulfilled=%d",
                         event.event_type,
                         event.student_id,
-                        sum(1 for o in outcomes if o.action != "noop"),
+                        sum(
+                            1
+                            for o in outcomes
+                            if o.action in ("fulfilled", "resolved", "replan")
+                        ),
                     )
             except Exception:
                 await session.rollback()

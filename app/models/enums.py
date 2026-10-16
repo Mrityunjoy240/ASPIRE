@@ -81,11 +81,14 @@ class FollowUpTriggerType(str, enum.Enum):
 
 
 class FollowUpStatus(str, enum.Enum):
-    """ADR-004 §2.3 lifecycle: SCHEDULED → FULFILLED → EVALUATED."""
+    """ADR-004 §2.3 lifecycle: SCHEDULED → FULFILLED → EVALUATED, or
+    SCHEDULED → CANCELLED when superseded (Option B, ADR-004 §2.1 — see
+    the consumption rule: only one follow-up drives a case cycle)."""
 
     SCHEDULED = "SCHEDULED"
     FULFILLED = "FULFILLED"
     EVALUATED = "EVALUATED"
+    CANCELLED = "CANCELLED"
 
 
 class RecordStatus(str, enum.Enum):

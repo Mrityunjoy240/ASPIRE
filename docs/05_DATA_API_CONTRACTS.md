@@ -432,10 +432,10 @@ decision, option C, 13 Oct 2026). Persists the follow-up policy assumed by
 `03_SYSTEM_SPEC.md` §10.2.
 
 ```sql
-id                        UUID PRIMARY KEY
+id                        UUID PRIMARY KEY DEFAULT gen_random_uuid()
 case_id                   UUID NOT NULL REFERENCES intervention_cases(id)
 trigger_type              TEXT NOT NULL  -- ATTENDANCE_INTERVENTION | STUDY_INTERVENTION | ASSIGNMENT_INTERVENTION | CUSTOM_DATE
-status                    TEXT NOT NULL DEFAULT 'SCHEDULED'  -- SCHEDULED | FULFILLED | EVALUATED
+status                    TEXT NOT NULL DEFAULT 'SCHEDULED'  -- SCHEDULED | FULFILLED | EVALUATED | CANCELLED
 due_at                    TIMESTAMPTZ    -- CUSTOM_DATE only; NULL for event-driven types
 triggered_at              TIMESTAMPTZ    -- fulfilment time (event fired / due date reached)
 evaluation_window_ends_at TIMESTAMPTZ    -- set on fulfilment; drives the expiry re-check
@@ -445,10 +445,17 @@ created_by                TEXT NOT NULL  -- 'SYSTEM' or user UUID
 created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
-**Lifecycle:** `SCHEDULED → FULFILLED → EVALUATED`. The status flip under
-`SELECT ... FOR UPDATE` is the durable consumer-side dedup (ADR-004 §2.3,
-lead option A). Multiple SCHEDULED rows per case are legal (mentor may stack
-a custom date on an event-driven follow-up).
+**Lifecycle:** `SCHEDULED → FULFILLED → EVALUATED`, or `SCHEDULED →
+CANCELLED` (superseded sibling, ADR-004 Amendment 1: a due dispatch whose
+case left `ACTIVE`, and a sibling overtaken by another same-case
+fulfilment — each writes the mandatory `FOLLOW_UP_SUPERSEDED` audit row).
+The status flip under `SELECT ... FOR UPDATE` is the durable consumer-side
+dedup (ADR-004 §2.3, lead option A). Multiple SCHEDULED rows per case are
+legal (mentor may stack a custom date on an event-driven follow-up);
+`CANCELLED` never applies to FULFILLED/EVALUATED rows and does not change
+the `RESOLVED | REPLAN_REQUIRED` outcome vocabulary. Column defaults and
+status vocabulary added by migration `017_followup_contract_alignment.sql`
+(16 Oct 2026); the DEC-03 id-default/ORM mirror test covers this table.
 
 **API shapes (ADR-004 §2.7):**
 - `POST /api/v1/cases/{case_id}/follow-ups` → `201 FollowUpCreateResponse`
