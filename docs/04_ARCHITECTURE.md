@@ -1,10 +1,10 @@
 # 04_ARCHITECTURE.md
 # EduGen AI / ASPIRE — System Architecture
 
-**STATUS: 🟢 FROZEN** — Mother System architecture frozen via [ADR-001](file:///c:/Users/ANAMIKA/DEV/Temp/ASPIRE/docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) (07 Oct 2026).
+**STATUS: 🟢 FROZEN (core, via ADR-001, 07 Oct 2026) + Phase-0 RECONCILED (11 Oct 2026, via ADR-003)** — the ADR-001 architecture is confirmed against the implemented codebase; §9 Addendum supersedes the §6 target folder tree and extends the §1 system map to the four-client ecosystem. Decisions in ADR-003 §6 remain OPEN and require team-lead approval.
 **Author:** Mrityunjoy Kapat (Team Lead)
-**Date:** 07 October 2026
-**Version:** 2.0 (Mother System architecture frozen)
+**Date:** 07 October 2026 (v2.0 frozen) · 11 October 2026 (v2.1 Phase-0 reconciliation addendum)
+**Version:** 2.1 (frozen core + reconciliation addendum)
 
 > [!IMPORTANT]
 > This document defines **service boundaries, ownership, and communication contracts**.
@@ -263,4 +263,61 @@ ASPIRE/
 | ARCH-04 | Mother System Internal Topology | Mrityunjoy + Bishesh | ✅ RESOLVED — Layered Modular Monolith in single FastAPI container (ADR-001) |
 | OQ-AG02 | Synchronous vs Async Agent Execution | Mrityunjoy | ✅ RESOLVED — Event-triggered async background tasks + ad-hoc sync query endpoints (ADR-001) |
 | OQ-AG03 | Scheduler Implementation Mechanism | Bishesh | ✅ RESOLVED — In-process asyncio worker loop at startup + every 5 minutes (DM-AG03 / ADR-001) |
+
+---
+
+## 9. Phase-0 Reconciliation Addendum (11 October 2026 — ADR-003)
+
+> This addendum reconciles the frozen architecture with the **actual implemented codebase** at `feature/vertical-slice-case-approval` @ `d78ffca`. It does **not** reverse any ADR-001 decision. Full findings: `docs/decisions/ADR-003_CORE_PLATFORM_RECONCILIATION.md`. Ordering/roadmap: `docs/11_ROADMAP.md`.
+
+### 9.1 Four-client system map (extends §1)
+
+```
+ ┌────────────────────┐  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+ │ STUDENT ANDROID    │  │ CLASS TEACHER      │  │ STUDENT WEBSITE  │  │ FACULTY WEBSITE  │
+ │ (Android Studio,   │  │ ANDROID            │  │ (Next.js,        │  │ (Next.js —        │
+ │  external repo)    │  │ (Android Studio,   │  │  apps/mobile)    │  │  apps/web:        │
+ │                    │  │  external repo)    │  │                  │  │  Faculty/CT/      │
+ │                    │  │                    │  │                  │  │  Mentor/HOD/Admin)│
+ └─────────┬──────────┘  └─────────┬──────────┘  └────────┬─────────┘  └────────┬─────────┘
+           └───────────────────────┴─────────────────────┴──────────────────────┘
+                                           │ HTTPS + Supabase JWT (identity only)
+                              ┌────────────▼────────────┐
+                              │  ASPIRE CORE PLATFORM   │
+                              │  FastAPI (app/) —       │
+                              │  auth deps → routers →  │
+                              │  services → engines →   │
+                              │  event bus → SQLAlchemy │
+                              └────────────┬────────────┘
+                              PostgreSQL + pgvector (db/migrations/*.sql = schema authority)
+```
+
+Clients are presentation-only (zero business logic — §4 and `ASPIRE_APPLICATION_BOUNDARIES.md` remain authoritative). The external Compose scaffold at `C:\Users\ANAMIKA\AndroidStudioProjects\ASPIRE` is a mock-data UX prototype, **not** a contract-consuming client yet.
+
+### 9.2 Actual module map (canonical — supersedes the §6 target tree)
+
+The implementation lives in a single root Python package `app/` (not `services/`). §6 is retained above as historical target; this table is authoritative:
+
+| Actual path | Layer (ADR-001) | State @ d78ffca |
+|---|---|---|
+| `app/main.py` | App assembly, lifespan, event-bus wiring | Implemented |
+| `app/api/routers/` (students, attendance, assessments, tasks, cases) | API & Security | Implemented; assessments auth wiring defective (ADR-003 §6.3) |
+| `app/api/deps.py`, `app/api/schemas.py` | JWKS auth + RBAC deps, Pydantic schemas | Implemented (ownership helper incomplete) |
+| `app/services/` (case_service, student_action_service, evidence, llm_service) | Domain services + LLM gateway | Implemented (llm_service unused by agents yet) |
+| `app/engines/` (attendance, assessment, priority, tasks, intervention) | Deterministic engines | Implemented (uneven test depth) |
+| `app/models/` (21 entities) | Persistence models mirroring migrations | Implemented, 1:1 with migrations 001–013 |
+| `app/core/` (config, database, events) | Settings, async engine/NullPool, in-process event bus | Implemented |
+| `app/agents/` | Agent orchestration (Layer 5) | **Not present** (spec only) |
+| `db/migrations/` 001–013 | Schema authority | Implemented |
+| `contracts/openapi.json` | API contract artifact (DM-API01) | Generated, CI drift-guarded |
+| `apps/web`, `apps/mobile`, `packages/shared` | Web clients + shared TS | Prototypes (mentor workspace; mock student PWA) |
+| `tests/` (17 files, 7 DSN-gated `*_pg.py`) | Unit + integration | 169 unit green; PG integration local-only |
+| `db/seeds/`, `evals/`, `uv.lock` | Seeds, eval harness, lockfile | **Not present** |
+
+### 9.3 Verified flows & boundaries (confirmations)
+
+- **AuthZ:** JWT = identity only; roles from `user_role_assignments` (multi-role, scoped, time-boxed) — matches §4 and `07 §2`; record-level scoping partially implemented (see ADR-003 §3.3).
+- **Events:** commit-then-emit via in-process bus (ADR-002) — implemented; consumers and scheduler not yet built.
+- **Schema/contract authority:** migrations + generated OpenAPI, both enforced in practice; drift guard live in CI.
+- **Open structural items for lead (ADR-003 §6):** default-branch rename (ARCH-03), rule precedence/effective dating, `uv.lock`, P0 security slice approval, Android repo stewardship.
 

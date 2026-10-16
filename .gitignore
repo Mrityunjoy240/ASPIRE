@@ -73,3 +73,8 @@ supabase/.temp/
 
 # Keep the master book only as explicit exception
 !EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx
+
+# Build tooling
+.turbo/
+*.tsbuildinfo
+eslintcache
