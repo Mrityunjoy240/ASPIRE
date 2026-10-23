@@ -412,10 +412,9 @@ async def test_f05_dead_plan_cannot_authorize_approval(dead_status: str):
 
 # ---- F-02: rejection publishes nothing at all ----
 
-async def test_f02_rejection_never_calls_bus_publish():
-    """Stronger than 'no APPROVED event': spying on EventBus.publish proves a
-    REJECTED decision publishes zero domain events of any type — no
-    INTERVENTION_PLAN_REJECTED is invented (ADR-002 §2; catalog is canonical)."""
+async def test_f02_rejection_publishes_rejected_event():
+    """Verify that a REJECTED decision now publishes an INTERVENTION_PLAN_REJECTED event
+    (implemented in R5 to close the agentic replan loop)."""
     mentor_id = uuid.uuid4()
     case = make_case(InterventionCaseStatus.PENDING_APPROVAL, mentor_id)
     plan = make_plan(case)
@@ -433,11 +432,18 @@ async def test_f02_rejection_never_calls_bus_publish():
 
     await approve_plan(
         session, case=case, plans=[plan], decision="REJECTED",
-        mentor_notes="no", actor_id=mentor_id, event_bus=bus,
+        mentor_notes="needs more detail", actor_id=mentor_id, event_bus=bus,
     )
 
-    assert published == []  # nothing published, any event_type
+    assert len(published) == 1
+    event = published[0]
+    assert event.event_type == "INTERVENTION_PLAN_REJECTED"
+    assert event.student_id == case.student_id
+    assert event.source_id == plan.id
+    assert event.payload["case_id"] == str(case.id)
+    assert event.payload["rejection_reason"] == "needs more detail"
+
     assert case.status == InterventionCaseStatus.REPLAN_REQUIRED
-    # audit still written (rejection is audit-only, ADR-002 §2)
+    # audit still written
     session.add.assert_called_once()
     assert session.add.call_args[0][0].action_type == "PLAN_REJECTED_BY_MENTOR"

@@ -19,6 +19,7 @@ from app.models.enums import InterventionCaseStatus
 from app.models.intervention import InterventionCase, InterventionPlan
 
 EVENT_INTERVENTION_PLAN_APPROVED = "INTERVENTION_PLAN_APPROVED"
+EVENT_INTERVENTION_PLAN_REJECTED = "INTERVENTION_PLAN_REJECTED"
 
 # 03_SYSTEM_SPEC §10.2 mentor rows: PENDING_APPROVAL + mentor action → next state.
 # The service refuses any transition not listed here.
@@ -177,6 +178,19 @@ async def approve_plan(
                 "decision": decision,
                 "previous_status": previous_status,
                 "new_status": mapping["case_status"],
+            },
+        )
+        await event_bus.publish(event)
+    elif decision == "REJECTED" and event_bus is not None:
+        event = DomainEvent(
+            event_type=EVENT_INTERVENTION_PLAN_REJECTED,
+            student_id=case.student_id,
+            source_id=plan.id,
+            payload={
+                "case_id": str(case.id),
+                "student_id": str(case.student_id),
+                "mentor_id": str(actor_id),
+                "rejection_reason": mentor_notes,
             },
         )
         await event_bus.publish(event)
