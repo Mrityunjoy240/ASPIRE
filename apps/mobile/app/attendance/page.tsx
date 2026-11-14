@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { MobileLayout } from "@/components/MobileLayout";
+import { StudentLayout } from "@/components/layout/StudentLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -9,8 +9,6 @@ import {
   CheckCircle2,
   XCircle,
   FileQuestion,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 
 interface CourseAttendance {
@@ -95,24 +93,24 @@ const COURSES_DATA: CourseAttendance[] = [
   },
 ];
 
-export default function AttendanceLedgerPage() {
-  const [expandedCourse, setExpandedCourse] = useState<string>("cs501");
+export default function DesktopAttendancePage() {
+  const [selectedCourse, setSelectedCourse] = useState<CourseAttendance>(COURSES_DATA[0]);
   const [showDiscrepancyModal, setShowDiscrepancyModal] = useState(false);
   const [discrepancySubmitted, setDiscrepancySubmitted] = useState(false);
 
   return (
-    <MobileLayout>
-      <div className="space-y-4">
+    <StudentLayout>
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-lg font-semibold text-white tracking-tight">Attendance Ledger</h1>
-            <p className="text-xs text-[#8A8F98]">
-              Verified Institutional Records · Minimum Threshold: <span className="text-white font-mono">75.0%</span>
+            <h1 className="text-xl font-bold text-white tracking-tight">Institutional Attendance Ledger</h1>
+            <p className="text-xs text-[#8A8F98] mt-0.5">
+              Verified BCREC Attendance Ledger · Institutional Rule: <span className="font-mono text-white font-semibold">Min 75.0% without condonation penalty</span>
             </p>
           </div>
           <Button
-            size="sm"
+            size="md"
             variant="secondary"
             onClick={() => setShowDiscrepancyModal(true)}
             icon={<FileQuestion className="w-3.5 h-3.5 text-[#5E6AD2]" />}
@@ -121,141 +119,183 @@ export default function AttendanceLedgerPage() {
           </Button>
         </div>
 
-        {/* Aggregate Health Banner */}
-        <Card className="p-3.5 border-rose-500/25 bg-gradient-to-r from-[#141014] to-[#0D0E10] flex items-center justify-between">
+        {/* Aggregate Status Banner */}
+        <Card className="p-4 border-rose-500/25 bg-gradient-to-r from-[#141014] to-[#0D0E10] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <StatusBadge variant="critical" showPulse>
-                1 SUBJECT BELOW THRESHOLD
+                1 COURSE BELOW THRESHOLD
               </StatusBadge>
-              <span className="text-xs text-white font-semibold">Semester Aggregate: 80.2%</span>
+              <span className="text-xs font-semibold text-white">Cumulative Aggregate: 80.2% (89 / 111 lectures)</span>
             </div>
-            <p className="text-[11px] text-[#8A8F98]">
-              CS501 (DBMS) needs immediate attendance recovery to avoid ESE debarment.
+            <p className="text-xs text-[#8A8F98]">
+              CS501 (DBMS) is at 73.3%. Attend the next 3 consecutive lectures to restore exam clearance before next week.
             </p>
           </div>
-          <div className="text-right shrink-0 font-mono">
-            <span className="text-[10px] text-[#8A8F98] block">Overall Attended</span>
-            <span className="text-sm font-bold text-white">89 / 111</span>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right font-mono text-xs">
+              <span className="text-[#8A8F98] block text-[10px]">Overall Margin</span>
+              <span className="text-emerald-400 font-bold">+7 Safe Sessions</span>
+            </div>
           </div>
         </Card>
 
-        {/* Courses Ledger List */}
-        <div className="space-y-2.5">
-          {COURSES_DATA.map((course) => {
-            const pct = ((course.attended / course.conducted) * 100).toFixed(1);
-            const isExpanded = expandedCourse === course.id;
+        {/* 2-Column Desktop Ledger: Left Subjects Grid (7 Cols), Right Course Session History (5 Cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: All Courses Ledger (7 Cols) */}
+          <div className="lg:col-span-7 space-y-3">
+            <div className="flex items-center justify-between text-xs text-[#8A8F98] font-semibold uppercase tracking-wider">
+              <span>Enrolled Courses</span>
+              <span>Click a course to view session audit</span>
+            </div>
 
-            return (
-              <Card key={course.id} className="overflow-hidden border-white/[0.08]">
-                {/* Clickable Course Header Row */}
-                <div
-                  onClick={() => setExpandedCourse(isExpanded ? "" : course.id)}
-                  className="p-3.5 flex items-center justify-between cursor-pointer hover:bg-white/[0.02] transition-colors"
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-xs font-semibold text-white truncate">{course.name}</span>
-                      <span className="text-[10px] font-mono text-[#8A8F98] px-1 py-0.2 rounded bg-white/[0.04]">
-                        {course.code}
-                      </span>
+            <div className="space-y-2.5">
+              {COURSES_DATA.map((course) => {
+                const pct = ((course.attended / course.conducted) * 100).toFixed(1);
+                const isSelected = selectedCourse.id === course.id;
+
+                return (
+                  <Card
+                    key={course.id}
+                    onClick={() => setSelectedCourse(course)}
+                    className={`p-4 cursor-pointer transition-all ${
+                      isSelected
+                        ? "border-[#5E6AD2] bg-[#121316] shadow-md shadow-indigo-500/10"
+                        : "border-white/[0.08] hover:border-white/[0.15] bg-[#0D0E10]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-semibold text-white truncate">{course.name}</span>
+                          <span className="text-[10px] font-mono text-[#8A8F98] px-1.5 py-0.2 rounded bg-white/[0.04]">
+                            {course.code}
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#8A8F98]">
+                          {course.faculty} · <span className="font-mono text-white/80">{course.attended}/{course.conducted} classes</span>
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`text-base font-bold font-mono ${
+                            course.status === "critical" ? "text-rose-400" : "text-emerald-400"
+                          }`}
+                        >
+                          {pct}%
+                        </span>
+                        <span className="block text-[11px] text-[#8A8F98] font-mono">
+                          {course.safeBunks === 0 ? "0 bunks left" : `${course.safeBunks} safe bunks`}
+                        </span>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-[#8A8F98]">
-                      {course.faculty} · <span className="font-mono">{course.attended}/{course.conducted} classes</span>
+
+                    {/* Progress Bar */}
+                    <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full ${
+                          course.status === "critical" ? "bg-rose-500" : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column: Selected Course Session History (5 Cols) */}
+          <div className="lg:col-span-5 space-y-3">
+            <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-3">
+              <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">{selectedCourse.name}</h3>
+                  <p className="text-xs text-[#8A8F98] font-mono">{selectedCourse.code} · Session Log</p>
+                </div>
+                <span
+                  className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${
+                    selectedCourse.status === "critical"
+                      ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                      : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                  }`}
+                >
+                  {((selectedCourse.attended / selectedCourse.conducted) * 100).toFixed(1)}%
+                </span>
+              </div>
+
+              {/* Session list */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-semibold text-[#8A8F98] uppercase tracking-wider block">
+                  Recent Attendance Records:
+                </span>
+
+                <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1">
+                  {selectedCourse.recentSessions.map((session, sIdx) => (
+                    <div
+                      key={sIdx}
+                      className="p-2.5 rounded bg-[#121316] border border-white/[0.04] flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {session.status === "present" ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        )}
+                        <div>
+                          <div className="font-medium text-white">{session.date}</div>
+                          <div className="text-[11px] text-[#8A8F98]">{session.time}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {session.note && (
+                          <span className="text-[10px] text-[#8A8F98] italic hidden sm:inline">
+                            {session.note}
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded font-semibold ${
+                            session.status === "present"
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "bg-rose-500/15 text-rose-300"
+                          }`}
+                        >
+                          {session.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {selectedCourse.status === "critical" && (
+                <div className="pt-3 border-t border-white/[0.06] space-y-2">
+                  <div className="p-2.5 rounded bg-rose-500/10 border border-rose-500/25 text-xs text-rose-300 space-y-1">
+                    <span className="font-semibold block">⚠️ Action Required</span>
+                    <p className="text-[11px] text-rose-300/90 leading-relaxed">
+                      You need to attend the next 3 consecutive lectures to reach 75.8% before the final exam list freezes.
                     </p>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <span
-                        className={`text-sm font-bold font-mono ${
-                          course.status === "critical" ? "text-rose-400" : "text-emerald-400"
-                        }`}
-                      >
-                        {pct}%
-                      </span>
-                      <span className="block text-[10px] text-[#8A8F98] font-mono">
-                        {course.safeBunks === 0 ? "0 Bunks Left" : `${course.safeBunks} safe bunks`}
-                      </span>
-                    </div>
-
-                    <div className="text-[#8A8F98]">
-                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </div>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    className="w-full"
+                    onClick={() => setShowDiscrepancyModal(true)}
+                  >
+                    Contest Biometric Absence
+                  </Button>
                 </div>
-
-                {/* Expanded Session Timeline */}
-                {isExpanded && (
-                  <div className="px-3.5 pb-3.5 pt-1 border-t border-white/[0.06] bg-[#121316]/50 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] text-[#8A8F98]">
-                      <span>Recent Session History:</span>
-                      <span className="font-mono text-[10px]">Verified against Biometric & Faculty Grid</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      {course.recentSessions.map((session, sIdx) => (
-                        <div
-                          key={sIdx}
-                          className="flex items-center justify-between p-2 rounded bg-[#0D0E10] border border-white/[0.04] text-xs"
-                        >
-                          <div className="flex items-center gap-2">
-                            {session.status === "present" ? (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            ) : (
-                              <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                            )}
-                            <div>
-                              <span className="text-white font-medium">{session.date}</span>
-                              <span className="text-[#8A8F98] text-[10px] ml-2">({session.time})</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {session.note && (
-                              <span className="text-[10px] text-[#8A8F98] italic hidden sm:inline">
-                                {session.note}
-                              </span>
-                            )}
-                            <span
-                              className={`text-[10px] font-mono uppercase px-1.5 py-0.5 rounded ${
-                                session.status === "present"
-                                  ? "bg-emerald-500/10 text-emerald-300"
-                                  : "bg-rose-500/10 text-rose-300"
-                              }`}
-                            >
-                              {session.status}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {course.status === "critical" && (
-                      <div className="p-2.5 rounded bg-rose-500/10 border border-rose-500/25 flex items-center justify-between text-xs mt-2">
-                        <span className="text-rose-300 text-[11px]">
-                          ⚠️ Recovery Target: Attend next 3 classes without absence.
-                        </span>
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => setShowDiscrepancyModal(true)}
-                        >
-                          Contest Absences
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </Card>
-            );
-          })}
+              )}
+            </Card>
+          </div>
         </div>
 
         {/* Discrepancy Modal */}
         {showDiscrepancyModal && (
-          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-            <Card className="max-w-md w-full p-4 space-y-3 bg-[#121316] border-white/[0.12]">
+          <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-5 space-y-3.5 bg-[#121316] border-white/[0.12]">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileQuestion className="w-4 h-4 text-[#5E6AD2]" />
@@ -275,14 +315,14 @@ export default function AttendanceLedgerPage() {
               {!discrepancySubmitted ? (
                 <div className="space-y-3 text-xs">
                   <p className="text-[#9DA3AE]">
-                    If biometric reader timed out or you submitted a medical certificate to the HOD, request verification:
+                    If a biometric reader timed out or you submitted medical leave documentation to your mentor, submit a correction request:
                   </p>
                   <div>
                     <label className="block text-[11px] text-[#8A8F98] mb-1">Subject</label>
                     <input
                       type="text"
                       disabled
-                      value="CS501 - Database Management Systems"
+                      value={`${selectedCourse.code} - ${selectedCourse.name}`}
                       className="w-full bg-[#0D0E10] border border-white/[0.08] p-2 rounded text-white font-mono text-xs"
                     />
                   </div>
@@ -322,9 +362,9 @@ export default function AttendanceLedgerPage() {
               ) : (
                 <div className="text-center py-4 space-y-2">
                   <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                  <p className="text-xs font-semibold text-white">Discrepancy Routed to Faculty Drawer</p>
-                  <p className="text-[11px] text-[#8A8F98]">
-                    Record quarantined. Your class teacher has been notified to verify attendance logs.
+                  <p className="text-sm font-semibold text-white">Discrepancy Routed to Faculty Drawer</p>
+                  <p className="text-xs text-[#8A8F98]">
+                    Record quarantined. Your class teacher has been notified to verify attendance logs against biometric timestamps.
                   </p>
                   <Button
                     size="sm"
@@ -343,6 +383,6 @@ export default function AttendanceLedgerPage() {
           </div>
         )}
       </div>
-    </MobileLayout>
+    </StudentLayout>
   );
 }

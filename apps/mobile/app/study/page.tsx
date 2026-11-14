@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { MobileLayout } from "@/components/MobileLayout";
+import { StudentLayout } from "@/components/layout/StudentLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
@@ -13,6 +13,10 @@ import {
   FileText,
   ArrowRight,
   RefreshCw,
+  Layers,
+  Database,
+  FileCheck,
+  ChevronRight,
 } from "lucide-react";
 
 interface QnA {
@@ -67,7 +71,7 @@ const MOCK_QUIZ: QuizQuestion[] = [
     question: "In BCNF, for every non-trivial functional dependency X → Y, what must X be?",
     options: ["Candidate key only", "Superkey", "Primary key only", "Foreign key"],
     correctIndex: 1,
-    explanation: "By definition, Boyee-Codd Normal Form requires the determinant X to be a superkey for every non-trivial functional dependency.",
+    explanation: "By definition, Boyce-Codd Normal Form requires the determinant X to be a superkey for every non-trivial functional dependency.",
   },
   {
     id: 3,
@@ -102,9 +106,7 @@ const MOCK_QUIZ: QuizQuestion[] = [
   },
 ];
 
-export default function StudyCornerPage() {
-  const [activeTab, setActiveTab] = useState<"chat" | "quiz">("chat");
-
+export default function DesktopStudyCornerPage() {
   // Q&A State
   const [messages, setMessages] = useState<QnA[]>([PRESET_QUESTIONS[0]]);
   const [inputQuestion, setInputQuestion] = useState("");
@@ -118,9 +120,10 @@ export default function StudyCornerPage() {
     const qText = text || inputQuestion;
     if (!qText.trim()) return;
 
-    // Check if preset matches or generate simulated intelligent answer grounded in syllabus
     const foundPreset = PRESET_QUESTIONS.find(
-      (p) => p.question.toLowerCase().includes(qText.toLowerCase()) || qText.toLowerCase().includes(p.question.toLowerCase().slice(0, 15))
+      (p) =>
+        p.question.toLowerCase().includes(qText.toLowerCase()) ||
+        qText.toLowerCase().includes(p.question.toLowerCase().slice(0, 15))
     );
 
     setIsTyping(true);
@@ -141,7 +144,7 @@ export default function StudyCornerPage() {
         ]);
       }
       setIsTyping(false);
-    }, 600);
+    }, 500);
   };
 
   const handleSelectOption = (questionId: number, optionIndex: number) => {
@@ -158,248 +161,317 @@ export default function StudyCornerPage() {
   };
 
   return (
-    <MobileLayout>
+    <StudentLayout>
       <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* Top Studio Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold text-white tracking-tight">AI Study Corner</h1>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                NotebookLM Grounded
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold text-white tracking-tight">AI Study Corner</h1>
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#5E6AD2]" />
+                NotebookLM Model
               </span>
             </div>
-            <p className="text-xs text-[#8A8F98]">
-              Grounded on <span className="text-white font-medium">BCREC CS501 Syllabus Chunks</span> & Lecture Slides
+            <p className="text-xs text-[#8A8F98] mt-0.5">
+              Interactive academic workspace grounded on <span className="text-white font-medium">BCREC CS501 Syllabus & Lecture Slides</span>
             </p>
           </div>
 
-          <div className="flex items-center gap-1 bg-[#121316] p-1 rounded-md border border-white/[0.08]">
-            <button
-              onClick={() => setActiveTab("chat")}
-              className={`px-2.5 py-1 text-xs rounded font-medium transition-colors ${
-                activeTab === "chat" ? "bg-[#5E6AD2] text-white" : "text-[#8A8F98] hover:text-white"
-              }`}
-            >
-              Ask Syllabus
-            </button>
-            <button
-              onClick={() => setActiveTab("quiz")}
-              className={`px-2.5 py-1 text-xs rounded font-medium transition-colors flex items-center gap-1 ${
-                activeTab === "quiz" ? "bg-[#5E6AD2] text-white" : "text-[#8A8F98] hover:text-white"
-              }`}
-            >
-              Practice Quiz
-            </button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#8A8F98] font-mono">
+              Course: <span className="text-white font-semibold">CS501 DBMS</span>
+            </span>
+            <Link href="/plan">
+              <Button size="sm" variant="secondary">
+                View Recovery Plan
+              </Button>
+            </Link>
           </div>
         </div>
 
-        {/* Tab 1: Chat with Syllabus */}
-        {activeTab === "chat" && (
-          <div className="space-y-3">
-            {/* Quick Prompt Pills */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] text-[#8A8F98] uppercase tracking-wider font-semibold">
-                High-Yield Prompts:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {PRESET_QUESTIONS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    onClick={() => handleSendQuestion(preset.question)}
-                    className="text-left text-[11px] px-2.5 py-1 rounded bg-[#121316] hover:bg-[#1C1D22] text-[#ECEEF0] border border-white/[0.08] hover:border-white/[0.15] transition-colors"
-                  >
-                    💡 {preset.question.slice(0, 38)}...
-                  </button>
-                ))}
+        {/* 3-Column Desktop NotebookLM Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left Column: Grounded Sources & Modules (3 Cols) */}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Grounded Sources */}
+            <Card className="p-4 space-y-3 bg-[#0D0E10] border-white/[0.08]">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#8A8F98] flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-[#5E6AD2]" /> Sources & Notes
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400">3 Verified</span>
               </div>
-            </div>
 
-            {/* Conversation Feed */}
-            <div className="space-y-3 pt-1">
-              {messages.map((item, idx) => (
-                <div key={idx} className="space-y-2">
-                  {/* User Question Bubble */}
-                  <div className="flex justify-end">
-                    <div className="bg-[#1C1D22] border border-white/[0.1] text-white text-xs px-3 py-2 rounded-lg max-w-[85%] font-medium">
-                      {item.question}
-                    </div>
+              <div className="space-y-2">
+                <div className="p-2.5 rounded bg-[#121316] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-[#5E6AD2]" />
+                    <span className="text-xs font-medium text-white truncate">CS501 Syllabus (MAKAUT)</span>
                   </div>
-
-                  {/* AI Grounded Answer Card */}
-                  <Card className="p-3.5 space-y-2 bg-[#0D0E10] border-white/[0.08]">
-                    <div className="flex items-center gap-1.5 text-[11px] text-[#5E6AD2] font-semibold">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Syllabus Verified Answer</span>
-                    </div>
-
-                    <div className="text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line">
-                      {item.answer}
-                    </div>
-
-                    <div className="pt-2 border-t border-white/[0.06] flex items-center gap-1.5 text-[10px] text-[#8A8F98] font-mono">
-                      <FileText className="w-3 h-3 text-[#5E6AD2]" />
-                      <span>{item.citation}</span>
-                    </div>
-                  </Card>
+                  <p className="text-[10px] text-[#8A8F98] font-mono">433 KB · 46 Chunks Indexed</p>
                 </div>
-              ))}
 
-              {isTyping && (
-                <div className="flex items-center gap-2 text-xs text-[#8A8F98] italic p-2">
-                  <Sparkles className="w-3.5 h-3.5 animate-spin text-[#5E6AD2]" />
-                  <span>Retrieving exact BCREC syllabus chunks...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Input Bar */}
-            <div className="sticky bottom-16 bg-[#08090A]/90 backdrop-blur-sm pt-2 pb-1">
-              <div className="flex items-center gap-2 bg-[#121316] border border-white/[0.1] rounded-lg p-1.5 focus-within:border-[#5E6AD2] transition-colors">
-                <input
-                  type="text"
-                  placeholder="Ask any doubt about DBMS or OS syllabus..."
-                  value={inputQuestion}
-                  onChange={(e) => setInputQuestion(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendQuestion()}
-                  className="flex-1 bg-transparent text-xs text-white placeholder-[#6E7480] px-2 py-1 outline-none"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => handleSendQuestion()}
-                  disabled={!inputQuestion.trim()}
-                  icon={<Send className="w-3 h-3" />}
-                >
-                  Ask
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab 2: Interactive Practice Quiz */}
-        {activeTab === "quiz" && (
-          <div className="space-y-4">
-            <Card className="p-3 bg-gradient-to-r from-[#12131F] to-[#0D0E10] border-indigo-500/25 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-white">DBMS Unit 3 Checkpoint Quiz</span>
-                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300">
-                    5 Questions
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#8A8F98]">
-                  Completing this quiz with ≥70% fulfills Day 2 of your Recovery Plan!
-                </p>
-              </div>
-
-              {quizSubmitted && (
-                <div className="text-right">
-                  <div className="text-xs text-[#8A8F98]">Score</div>
-                  <div className="font-mono text-base font-bold text-emerald-400">
-                    {calculateScore()} / {MOCK_QUIZ.length}
+                <div className="p-2.5 rounded bg-[#121316] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-[#5E6AD2]" />
+                    <span className="text-xs font-medium text-white truncate">Unit 3 Normalization Slides</span>
                   </div>
+                  <p className="text-[10px] text-[#8A8F98] font-mono">Prof. Samanta · 64 Slides</p>
                 </div>
-              )}
+
+                <div className="p-2.5 rounded bg-[#121316] border border-white/[0.06] space-y-1">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-[#5E6AD2]" />
+                    <span className="text-xs font-medium text-white truncate">BCREC PYQs 2023–2025</span>
+                  </div>
+                  <p className="text-[10px] text-[#8A8F98] font-mono">Autonomous Paper Set</p>
+                </div>
+              </div>
             </Card>
 
-            {/* Questions List */}
-            <div className="space-y-3">
-              {MOCK_QUIZ.map((q, qIndex) => {
-                const selectedOpt = userAnswers[q.id];
+            {/* Course Units Checklist */}
+            <Card className="p-4 space-y-2.5 bg-[#0D0E10] border-white/[0.08]">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#8A8F98] flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-[#5E6AD2]" /> Units Checklist
+              </span>
 
-                return (
-                  <Card key={q.id} className="p-3.5 space-y-2.5">
-                    <div className="flex items-start gap-2">
-                      <span className="text-xs font-mono font-bold text-[#5E6AD2]">Q{qIndex + 1}.</span>
-                      <p className="text-xs font-medium text-white leading-snug">{q.question}</p>
-                    </div>
-
-                    {/* Options */}
-                    <div className="space-y-1.5 pt-1">
-                      {q.options.map((opt, optIndex) => {
-                        let btnStyle = "bg-[#121316] text-[#ECEEF0] border-white/[0.08] hover:border-white/[0.15]";
-
-                        if (selectedOpt === optIndex && !quizSubmitted) {
-                          btnStyle = "bg-[#5E6AD2]/20 text-white border-[#5E6AD2]";
-                        }
-
-                        if (quizSubmitted) {
-                          if (optIndex === q.correctIndex) {
-                            btnStyle = "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
-                          } else if (selectedOpt === optIndex) {
-                            btnStyle = "bg-rose-500/15 text-rose-300 border-rose-500/40";
-                          } else {
-                            btnStyle = "bg-[#121316]/50 text-[#8A8F98] border-white/[0.04]";
-                          }
-                        }
-
-                        return (
-                          <button
-                            key={optIndex}
-                            onClick={() => handleSelectOption(q.id, optIndex)}
-                            disabled={quizSubmitted}
-                            className={`w-full text-left text-xs p-2.5 rounded-md border transition-all flex items-center justify-between ${btnStyle}`}
-                          >
-                            <span>{opt}</span>
-                            {quizSubmitted && optIndex === q.correctIndex && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            )}
-                            {quizSubmitted && selectedOpt === optIndex && optIndex !== q.correctIndex && (
-                              <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Explanation Reveal */}
-                    {quizSubmitted && (
-                      <div className="text-[11px] text-[#9DA3AE] bg-white/[0.03] p-2 rounded border border-white/[0.06] space-y-1">
-                        <span className="text-[10px] font-mono text-emerald-400 font-semibold uppercase">
-                          Explanation:
-                        </span>
-                        <p>{q.explanation}</p>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-
-            {/* Quiz Submit / Reset Buttons */}
-            <div className="flex items-center justify-between pt-2">
-              {!quizSubmitted ? (
-                <Button
-                  onClick={() => setQuizSubmitted(true)}
-                  disabled={Object.keys(userAnswers).length < MOCK_QUIZ.length}
-                  className="w-full"
-                >
-                  Submit Answers ({Object.keys(userAnswers).length}/{MOCK_QUIZ.length})
-                </Button>
-              ) : (
-                <div className="flex items-center justify-between w-full gap-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setUserAnswers({});
-                      setQuizSubmitted(false);
-                    }}
-                    icon={<RefreshCw className="w-3.5 h-3.5" />}
-                  >
-                    Retake Quiz
-                  </Button>
-                  <Link href="/plan" className="flex-1">
-                    <Button variant="primary" className="w-full" icon={<ArrowRight className="w-3.5 h-3.5" />}>
-                      Mark Progress in Plan
-                    </Button>
-                  </Link>
+              <div className="space-y-1.5 text-xs">
+                <div className="p-2 rounded bg-[#121316] text-[#9DA3AE] flex items-center justify-between">
+                  <span>Unit 1: ER & Relational Model</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
-              )}
-            </div>
+                <div className="p-2 rounded bg-[#121316] text-[#9DA3AE] flex items-center justify-between">
+                  <span>Unit 2: SQL & Relational Algebra</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="p-2 rounded bg-[#5E6AD2]/15 border border-[#5E6AD2]/30 text-white flex items-center justify-between font-medium">
+                  <span>Unit 3: Normalization & 3NF</span>
+                  <span className="text-[10px] font-mono text-amber-300">Target</span>
+                </div>
+                <div className="p-2 rounded bg-[#121316] text-[#9DA3AE] flex items-center justify-between">
+                  <span>Unit 4: Transaction & Concurrency</span>
+                  <span className="text-[10px] font-mono text-[#8A8F98]">Next</span>
+                </div>
+                <div className="p-2 rounded bg-[#121316] text-[#9DA3AE] flex items-center justify-between">
+                  <span>Unit 5: File Org & B+ Trees</span>
+                  <span className="text-[10px] font-mono text-[#8A8F98]">Next</span>
+                </div>
+              </div>
+            </Card>
           </div>
-        )}
+
+          {/* Center Column: Chat Canvas with Syllabus (5 Cols) */}
+          <div className="lg:col-span-5 space-y-3">
+            <Card className="p-4 bg-[#0D0E10] border-white/[0.08] min-h-[520px] flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+                  <span className="text-xs font-semibold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#5E6AD2]" />
+                    Chat with Syllabus Chunks
+                  </span>
+                  <span className="text-[10px] font-mono text-[#8A8F98]">Source-Citations Enabled</span>
+                </div>
+
+                {/* Pre-set questions pills */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] text-[#8A8F98] uppercase tracking-wider font-semibold">
+                    Exam High-Yield Queries:
+                  </span>
+                  <div className="flex flex-col gap-1.5">
+                    {PRESET_QUESTIONS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => handleSendQuestion(preset.question)}
+                        className="text-left text-xs p-2 rounded bg-[#121316] hover:bg-[#1C1D22] text-[#ECEEF0] border border-white/[0.06] hover:border-white/[0.14] transition-colors flex items-center justify-between"
+                      >
+                        <span className="truncate">💡 {preset.question}</span>
+                        <ChevronRight className="w-3.5 h-3.5 text-[#8A8F98] shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Conversation List */}
+                <div className="space-y-3 pt-2">
+                  {messages.map((item, idx) => (
+                    <div key={idx} className="space-y-2">
+                      {/* User Query */}
+                      <div className="flex justify-end">
+                        <div className="bg-[#1C1D22] border border-white/[0.1] text-white text-xs px-3.5 py-2.5 rounded-lg max-w-[90%] font-medium">
+                          {item.question}
+                        </div>
+                      </div>
+
+                      {/* AI Grounded Response */}
+                      <div className="bg-[#121316] border border-white/[0.08] rounded-lg p-3.5 space-y-2.5">
+                        <div className="flex items-center gap-1.5 text-xs text-[#5E6AD2] font-semibold">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Syllabus Grounded Explanation</span>
+                        </div>
+                        <div className="text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line">
+                          {item.answer}
+                        </div>
+                        <div className="pt-2 border-t border-white/[0.06] flex items-center gap-1.5 text-[10px] text-[#8A8F98] font-mono">
+                          <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>{item.citation}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {isTyping && (
+                    <div className="flex items-center gap-2 text-xs text-[#8A8F98] italic p-2">
+                      <Sparkles className="w-3.5 h-3.5 animate-spin text-[#5E6AD2]" />
+                      <span>Retrieving exact BCREC syllabus chunks...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Chat Input Field */}
+              <div className="pt-3 border-t border-white/[0.06] mt-4">
+                <div className="flex items-center gap-2 bg-[#121316] border border-white/[0.1] rounded-lg p-2 focus-within:border-[#5E6AD2] transition-colors">
+                  <input
+                    type="text"
+                    placeholder="Ask any question about DBMS Normalization, SQL, or Exams..."
+                    value={inputQuestion}
+                    onChange={(e) => setInputQuestion(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendQuestion()}
+                    className="flex-1 bg-transparent text-xs text-white placeholder-[#6E7480] px-2 py-1 outline-none"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSendQuestion()}
+                    disabled={!inputQuestion.trim()}
+                    icon={<Send className="w-3 h-3" />}
+                  >
+                    Ask
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Right Column: Interactive Practice Quiz (4 Cols) */}
+          <div className="lg:col-span-4 space-y-4">
+            <Card className="p-4 space-y-3.5 bg-[#0D0E10] border-white/[0.08]">
+              <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                <div>
+                  <h3 className="text-xs font-semibold text-white">Unit 3 Checkpoint Quiz</h3>
+                  <p className="text-[11px] text-[#8A8F98]">5 Questions · Target: ≥70%</p>
+                </div>
+                {quizSubmitted ? (
+                  <div className="text-right">
+                    <span className="text-[10px] text-[#8A8F98] block">Score</span>
+                    <span className="font-mono text-sm font-bold text-emerald-400">
+                      {calculateScore()} / {MOCK_QUIZ.length} ({Math.round((calculateScore() / MOCK_QUIZ.length) * 100)}%)
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/25">
+                    Live
+                  </span>
+                )}
+              </div>
+
+              {/* Questions */}
+              <div className="space-y-3.5 max-h-[500px] overflow-y-auto pr-1">
+                {MOCK_QUIZ.map((q, qIndex) => {
+                  const selectedOpt = userAnswers[q.id];
+
+                  return (
+                    <div key={q.id} className="p-3 rounded-lg bg-[#121316] border border-white/[0.06] space-y-2">
+                      <div className="flex items-start gap-1.5">
+                        <span className="text-xs font-mono font-bold text-[#5E6AD2]">Q{qIndex + 1}.</span>
+                        <p className="text-xs font-medium text-white leading-snug">{q.question}</p>
+                      </div>
+
+                      <div className="space-y-1.5 pt-1">
+                        {q.options.map((opt, optIndex) => {
+                          let btnStyle = "bg-[#0D0E10] text-[#ECEEF0] border-white/[0.06] hover:border-white/[0.14]";
+
+                          if (selectedOpt === optIndex && !quizSubmitted) {
+                            btnStyle = "bg-[#5E6AD2]/20 text-white border-[#5E6AD2]";
+                          }
+
+                          if (quizSubmitted) {
+                            if (optIndex === q.correctIndex) {
+                              btnStyle = "bg-emerald-500/15 text-emerald-300 border-emerald-500/40";
+                            } else if (selectedOpt === optIndex) {
+                              btnStyle = "bg-rose-500/15 text-rose-300 border-rose-500/40";
+                            } else {
+                              btnStyle = "bg-[#0D0E10]/50 text-[#8A8F98] border-white/[0.04]";
+                            }
+                          }
+
+                          return (
+                            <button
+                              key={optIndex}
+                              onClick={() => handleSelectOption(q.id, optIndex)}
+                              disabled={quizSubmitted}
+                              className={`w-full text-left text-xs p-2 rounded border transition-all flex items-center justify-between ${btnStyle}`}
+                            >
+                              <span>{opt}</span>
+                              {quizSubmitted && optIndex === q.correctIndex && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              )}
+                              {quizSubmitted && selectedOpt === optIndex && optIndex !== q.correctIndex && (
+                                <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {quizSubmitted && (
+                        <div className="text-[11px] text-[#9DA3AE] bg-white/[0.03] p-2 rounded border border-white/[0.06] space-y-0.5">
+                          <span className="text-[10px] font-mono text-emerald-400 font-semibold uppercase">
+                            Why:
+                          </span>
+                          <p>{q.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Quiz Submit / Reset Actions */}
+              <div className="pt-2 border-t border-white/[0.06]">
+                {!quizSubmitted ? (
+                  <Button
+                    onClick={() => setQuizSubmitted(true)}
+                    disabled={Object.keys(userAnswers).length < MOCK_QUIZ.length}
+                    className="w-full"
+                  >
+                    Submit Answers ({Object.keys(userAnswers).length}/{MOCK_QUIZ.length})
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setUserAnswers({});
+                        setQuizSubmitted(false);
+                      }}
+                      icon={<RefreshCw className="w-3.5 h-3.5" />}
+                    >
+                      Retake
+                    </Button>
+                    <Link href="/plan" className="flex-1">
+                      <Button variant="primary" size="sm" className="w-full" icon={<ArrowRight className="w-3.5 h-3.5" />}>
+                        Sync with Mentor Plan
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+        </div>
       </div>
-    </MobileLayout>
+    </StudentLayout>
   );
 }
