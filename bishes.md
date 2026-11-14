@@ -125,3 +125,4 @@ Class teachers are the daily source of truth. Build the screens/components where
 - **Student App Owner**: Mrityunjoy (`apps/mobile/`) is building the Student Web Experience (What-If calculator, approved plan execution, remedial quizzes).
 - **Branch**: Keep working on `feature/vertical-slice-case-approval` (or create a sub-branch like `feature/faculty-attendance-workspace` branching from it).
 - **If Unsure**: Ask Mrityunjoy before changing database schemas or introducing new global UI paradigms.
+
