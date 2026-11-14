@@ -12,6 +12,7 @@ from app.agents.attendance_specialist import AttendanceSpecialist
 from app.agents.supervisor import Supervisor
 from app.agents.tools import ServiceBackedTools
 from app.api.routers import assessments, attendance, cases, students, tasks
+from app.api.routers.admin import institutions
 from app.core.config import settings
 from app.core.database import async_session_maker, engine
 from app.core.events import EventBus
@@ -96,6 +97,7 @@ app.include_router(attendance.router)
 app.include_router(assessments.router)
 app.include_router(tasks.router)
 app.include_router(cases.router)
+app.include_router(institutions.router)
 
 
 if __name__ == "__main__":

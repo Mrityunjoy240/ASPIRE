@@ -63,6 +63,8 @@ supabase/.temp/
 
 # OpenCode local config (keep template, ignore personal)
 .opencode/config.json
+.opencode/node_modules/
+.qoder/
 
 # Large binary files — store in object storage, not git
 *.pdf

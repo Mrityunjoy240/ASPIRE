@@ -21,6 +21,13 @@
 > (§6) materializes components per course run. The BCREC AIML theory template (40/40/60) is a
 > versioned configuration example (03 §4.0), never a schema constant.
 
+> [!NOTE]
+> **BCREC Institutional Database (`db/institutional/`):** The comprehensive 108-entity
+> institutional schema (`iam`, `gov`, `academic`, `student`, `faculty`, `attendance`, `assessment`, `exam`)
+> is housed in `db/institutional/migrations/` (0001–0019) with reference catalog data in `db/institutional/seed/`.
+> The ASPIRE Core Platform migrations (`db/migrations/` 001–017) provide the intelligence, case management,
+> intervention loop, and autonomous audit layers on top of this institutional source of truth.
+
 ---
 
 ## 1. General Rules

@@ -1,11 +1,9 @@
-﻿"use client";
+"use client";
 
 import React, { useEffect, useState } from "react";
 import { WebLayout } from "@/components/layout/WebLayout";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { approveCase, fetchCaseQueue, type CaseQueueItem } from "@/lib/api";
+import { X } from "lucide-react";
 
 type UrgencyVariant = "critical" | "warning" | "monitor";
 
@@ -128,11 +126,11 @@ function mapUrgency(band: string): UrgencyVariant {
 
 function getEventLabels(events: string[]) {
   const eventMap: Record<string, string> = {
-    "ATTENDANCE_RISK": "Attendance Risk",
-    "ASSESSMENT_TREND_DECLINING": "Assessment Declining",
-    "EXAM_APPROACHING": "Exam Approaching",
+    ATTENDANCE_RISK: "Attendance Danger",
+    ASSESSMENT_TREND_DECLINING: "Grade Decay",
+    EXAM_APPROACHING: "Exam Proximate",
   };
-  return events.map(e => eventMap[e] || e).join(", ");
+  return events.map((e) => eventMap[e] || e).join(", ");
 }
 
 interface Notice {
@@ -152,7 +150,7 @@ export default function QueuePage() {
       try {
         const items = await fetchCaseQueue();
         if (cancelled) return;
-        setRows(items.map(item => ({ ...item, attendance: null, source: "live" as const })));
+        setRows(items.map((item) => ({ ...item, attendance: null, source: "live" as const })));
         setIsLive(true);
         setNotice(null);
       } catch (err) {
@@ -171,12 +169,14 @@ export default function QueuePage() {
     setNotice(null);
     try {
       await approveCase(row.case_id, "APPROVED");
-      setRows(prev => prev.map(r =>
-        r.case_id === row.case_id ? { ...r, status: "ACTIVE" } : r
-      ));
+      setRows((prev) =>
+        prev.map((r) =>
+          r.case_id === row.case_id ? { ...r, status: "ACTIVE" } : r
+        )
+      );
       setNotice({
         kind: "success",
-        text: `Plan approved for ${row.student_name} — case is now ACTIVE.`,
+        text: `Plan approved for ${row.student_name} — case transitioned to ACTIVE.`,
       });
     } catch (err) {
       setNotice({
@@ -188,153 +188,237 @@ export default function QueuePage() {
     }
   }
 
-  // DM-SS03 ordering is computed by the API (single source of truth — clients
-  // must not re-rank the mentor workload queue). Rows render in received order;
-  // DEMO_ROWS below are authored already in DM-SS03 order.
-  const criticalCount = rows.filter(r => mapUrgency(r.urgency_band) === "critical").length;
-  const warningCount = rows.filter(r => mapUrgency(r.urgency_band) === "warning").length;
-  const resolvedCount = 12; // mock
-
-  const noticeClasses: Record<Notice["kind"], string> = {
-    success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-    error: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-    info: "border-white/10 bg-white/[0.04] text-slate-400",
-  };
+  const criticalCount = rows.filter((r) => mapUrgency(r.urgency_band) === "critical").length;
+  const warningCount = rows.filter((r) => mapUrgency(r.urgency_band) === "warning").length;
 
   return (
     <WebLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header with Metrics */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-          <div>
-            <h1 className="text-page-title">Triage Queue</h1>
-            <p className="text-body text-slate-400 mt-1">
-              Mentor priority triage · Sorted per DM-SS03
-              <span className="ml-2 font-mono text-xs">{isLive ? "· live" : "· demo"}</span>
+      <div className="space-y-6 page-enter">
+        {/* Header Toolbar — Clear & Polished */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 pb-5 border-b border-white/[0.08]">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold tracking-tight text-[#FFFFFF]">
+                Triage Queue
+              </h1>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-white/[0.06] text-[#ECEEF0] border border-white/[0.10]">
+                DM-SS03 Canonical Order
+              </span>
+              <span
+                className={`text-xs font-mono font-semibold px-2 py-0.5 rounded ${
+                  isLive
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                    : "bg-white/[0.05] text-[#9DA3AE] border border-white/[0.08]"
+                }`}
+              >
+                {isLive ? "LIVE REST API" : "DEMO FIXTURE"}
+              </span>
+            </div>
+            <p className="text-[13px] text-[#9DA3AE]">
+              Prioritized mentor workload: Urgency Band → Nearest Exam (ASC) → Days Inactive (DESC)
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-rose-400">{criticalCount}</div>
-              <div className="text-micro text-slate-500">Critical</div>
-            </div>
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-amber-400">{warningCount}</div>
-              <div className="text-micro text-slate-500">Warning</div>
-            </div>
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-emerald-400">{resolvedCount}</div>
-              <div className="text-micro text-slate-500">Resolved</div>
+
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg bg-[#121316] border border-white/[0.08] text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-rose-400 linear-pulse-dot" />
+                <span className="text-rose-400 font-bold text-sm">{criticalCount}</span>
+                <span className="text-[#9DA3AE]">Critical</span>
+              </div>
+              <span className="text-[#6E7480]">|</span>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="text-amber-400 font-bold text-sm">{warningCount}</span>
+                <span className="text-[#9DA3AE]">Attention</span>
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Notice alert */}
         {notice && (
-          <div role="status" className={`rounded-lg border px-4 py-3 text-sm ${noticeClasses[notice.kind]}`}>
-            {notice.text}
+          <div
+            role="status"
+            className={`rounded-lg border px-4 py-3 text-xs font-medium flex items-center justify-between ${
+              notice.kind === "success"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                : notice.kind === "error"
+                ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                : "border-white/10 bg-white/[0.04] text-[#ECEEF0]"
+            }`}
+          >
+            <span className="text-sm">{notice.text}</span>
+            <button
+              onClick={() => setNotice(null)}
+              className="text-[#9DA3AE] hover:text-white ml-2 text-sm leading-none p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         )}
 
-        {/* Queue Table */}
-        <Card>
+        {/* Linear High-Visibility Data Table */}
+        <div className="rounded-xl border border-white/[0.08] bg-[#121316] overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full" role="table">
+            <table className="w-full text-left border-collapse" role="table">
               <thead>
-                <tr className="border-b border-white/[0.08]">
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Student</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Roll No</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Urgency</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Attendance</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Triggers</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Exam In</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Staleness</th>
-                  <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold pr-4">Actions</th>
+                <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Student
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Urgency
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Attendance
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Case Status
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Signals
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Exam Prox
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Staleness
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold pr-5">
+                    Action
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-white/[0.06]">
                 {rows.map((caseItem) => {
-                  const urgency = mapUrgency(caseItem.urgency_band);
+                  const isCritical = caseItem.urgency_band === "URGENT";
                   const canApprove = caseItem.status === "PENDING_APPROVAL";
                   const isApproving = pendingId === caseItem.case_id;
+
                   return (
-                    <tr key={caseItem.case_id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-4">
-                        <div>
-                          <p className="font-semibold text-white">{caseItem.student_name}</p>
-                          <p className="text-micro text-slate-500">Mentor: Dr. A. Sen</p>
+                    <tr
+                      key={caseItem.case_id}
+                      className="hover:bg-white/[0.03] transition-colors group"
+                    >
+                      {/* Student info */}
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-sm text-[#FFFFFF] group-hover:text-white transition-colors">
+                          {caseItem.student_name}
+                        </div>
+                        <div className="font-mono text-xs text-[#9DA3AE] mt-0.5">
+                          {caseItem.student_roll}
                         </div>
                       </td>
-                      <td className="px-4 py-4">
-                        <code className="font-mono text-slate-300">{caseItem.student_roll}</code>
-                      </td>
-                      <td className="px-4 py-4">
-                        <StatusBadge
-                          variant={urgency === "critical" ? "critical" : urgency === "warning" ? "warning" : "safe"}
-                          showPulse={urgency === "critical"}
+
+                      {/* Urgency */}
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-mono font-semibold ${
+                            isCritical
+                              ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                              : caseItem.urgency_band === "ATTENTION"
+                              ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                              : "bg-white/[0.05] text-[#ECEEF0] border border-white/[0.10]"
+                          }`}
                         >
-                          {caseItem.urgency_band.toUpperCase()}
-                        </StatusBadge>
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isCritical ? "bg-rose-400" : "bg-amber-400"
+                            }`}
+                          />
+                          {caseItem.urgency_band}
+                        </span>
                       </td>
-                      <td className="px-4 py-4">
+
+                      {/* Attendance */}
+                      <td className="py-2.5 px-3">
                         {caseItem.attendance != null ? (
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono font-bold ${caseItem.attendance < 75 ? "text-rose-400" : caseItem.attendance < 80 ? "text-amber-400" : "text-emerald-400"}`}>
+                          <div className="flex items-baseline gap-1.5">
+                            <span
+                              className={`font-mono font-bold text-sm ${
+                                caseItem.attendance < 75
+                                  ? "text-rose-400"
+                                  : caseItem.attendance < 80
+                                  ? "text-amber-400"
+                                  : "text-emerald-400"
+                              }`}
+                            >
                               {caseItem.attendance}%
                             </span>
-                            <span className="text-micro text-slate-500">/ 75%</span>
+                            <span className="text-xs text-[#6E7480] font-mono">/ 75% min</span>
                           </div>
                         ) : (
-                          <span className="font-mono text-slate-500" title="Attendance not in queue contract">—</span>
+                          <span className="text-[#6E7480] font-mono text-sm">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-4">
-                        <StatusBadge variant={getStatusVariant(caseItem.status)}>{getStatusLabel(caseItem.status)}</StatusBadge>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {caseItem.trigger_events.map((event, i) => (
-                            <span key={i} className="px-2 py-0.5 bg-white/[0.05] rounded text-xs text-slate-400">
-                              {getEventLabels([event])}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className="font-mono text-slate-300">
-                          {caseItem.nearest_exam_days != null
-                            ? `${caseItem.nearest_exam_days} day${caseItem.nearest_exam_days !== 1 ? "s" : ""}`
-                            : "—"}
+
+                      {/* Status */}
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-flex px-2.5 py-1 rounded-md text-xs font-mono font-semibold ${
+                            caseItem.status === "PENDING_APPROVAL"
+                              ? "bg-[#5E6AD2]/20 text-[#A5AEF6] border border-[#5E6AD2]/35"
+                              : caseItem.status === "ACTIVE"
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                              : caseItem.status === "ESCALATION_REQUIRED"
+                              ? "bg-rose-500/20 text-rose-400 border border-rose-500/35"
+                              : "bg-white/[0.05] text-[#ECEEF0] border border-white/[0.08]"
+                          }`}
+                        >
+                          {caseItem.status.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono ${
-                          (caseItem.days_since_last_action ?? 0) > 3 ? "text-rose-400 bg-rose-500/10" :
-                          (caseItem.days_since_last_action ?? 0) > 1 ? "text-amber-400 bg-amber-500/10" :
-                          "text-emerald-400 bg-emerald-500/10"
-                        }`}>
-                          <span className={(caseItem.days_since_last_action ?? 0) > 3 ? "animate-pulse" : ""} aria-hidden="true"></span>
-                          {caseItem.days_since_last_action ?? 0}d
+
+                      {/* Triggers */}
+                      <td className="py-2.5 px-3">
+                        <span className="text-xs text-[#ECEEF0] truncate max-w-[170px] block font-medium" title={caseItem.trigger_events.join(", ")}>
+                          {getEventLabels(caseItem.trigger_events)}
                         </span>
                       </td>
-                      <td className="px-4 py-4 pr-4">
-                        <div className="flex items-center gap-2 justify-end">
-                          <Button size="sm" variant="ghost" onClick={() => console.log("Details", caseItem.case_id)}>
-                            Details
-                          </Button>
+
+                      {/* Nearest Exam */}
+                      <td className="py-2.5 px-3 font-mono text-sm text-[#FFFFFF]">
+                        {caseItem.nearest_exam_days != null ? (
+                          <span className={caseItem.nearest_exam_days <= 7 ? "text-rose-400 font-bold" : "text-[#ECEEF0] font-semibold"}>
+                            {caseItem.nearest_exam_days} days
+                          </span>
+                        ) : (
+                          <span className="text-[#6E7480]">—</span>
+                        )}
+                      </td>
+
+                      {/* Staleness */}
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`font-mono text-xs px-2.5 py-0.5 rounded-md font-semibold ${
+                            (caseItem.days_since_last_action ?? 0) > 3
+                              ? "text-rose-400 bg-rose-500/15 border border-rose-500/30"
+                              : "text-[#9DA3AE] bg-white/[0.04]"
+                          }`}
+                        >
+                          {caseItem.days_since_last_action ?? 0}d ago
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-2.5 px-3 pr-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           {canApprove && (
-                            <Button
-                              size="sm"
-                              variant="primary"
+                            <button
                               disabled={isApproving}
                               onClick={() => handleApprove(caseItem)}
+                              className="h-7 px-2.5 text-xs font-semibold rounded-md bg-[#5E6AD2] hover:bg-[#6875E3] text-white transition-all active:scale-[0.98] disabled:opacity-50 shadow-sm"
                             >
-                              {isApproving ? "Approving…" : "Approve"}
-                            </Button>
+                              {isApproving ? "Approving…" : "Approve Plan"}
+                            </button>
                           )}
-                          <Button size="sm" variant="danger" onClick={() => console.log("Escalate", caseItem.case_id)}>
-                            Escalate
-                          </Button>
+                          <button
+                            onClick={() => console.log("Trace", caseItem.case_id)}
+                            className="h-7 px-2.5 text-xs font-medium rounded-md text-[#ECEEF0] hover:text-[#FFFFFF] bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] transition-colors"
+                          >
+                            Trace
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -343,36 +427,8 @@ export default function QueuePage() {
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </div>
     </WebLayout>
   );
-}
-
-function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    PENDING_APPROVAL: "PENDING APPROVAL",
-    PLAN_PROPOSED: "PLAN PROPOSED",
-    IN_REVIEW: "IN REVIEW",
-    OPEN: "OPEN",
-    MONITORING: "MONITORING",
-    ACTIVE: "ACTIVE",
-    ESCALATION_REQUIRED: "ESCALATION",
-    REPLAN_REQUIRED: "REPLAN",
-  };
-  return labels[status] ?? status;
-}
-
-function getStatusVariant(status: string): "critical" | "warning" | "safe" | "pending" | "overdue" | "pending-approval" {
-  const variants: Record<string, "critical" | "warning" | "safe" | "pending" | "overdue" | "pending-approval"> = {
-    PENDING_APPROVAL: "pending-approval",
-    PLAN_PROPOSED: "pending",
-    IN_REVIEW: "pending",
-    OPEN: "warning",
-    MONITORING: "safe",
-    ACTIVE: "safe",
-    ESCALATION_REQUIRED: "critical",
-    REPLAN_REQUIRED: "critical",
-  };
-  return variants[status] ?? "warning";
 }

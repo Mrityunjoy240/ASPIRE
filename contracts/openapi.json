@@ -52,6 +52,86 @@
         ]
       }
     },
+    "/api/v1/students/me/case": {
+      "get": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Get own current intervention case (R6)",
+        "description": "Return the current intervention case and proposed plan for the authenticated student.\n\nReturns 404 when no case is in PLAN_PROPOSED state (meaning the student has\nnothing to act on right now — case may be in a different state or no case exists).",
+        "operationId": "get_own_case_api_v1_students_me_case_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentCaseResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/students/me/case/respond": {
+      "post": {
+        "tags": [
+          "Students"
+        ],
+        "summary": "Respond to the proposed intervention plan (R6)",
+        "description": "Student accepts, customizes, or declines their proposed intervention plan.\n\nThis endpoint is the student-self version of POST /cases/{case_id}/student-decision.\nIt resolves the student's own case and delegates to the Student Action Service\n(student_action_service.decide_plan) which owns:\n  - PostgreSQL FOR UPDATE row lock (concurrency safety)\n  - State transition (PLAN_PROPOSED → PENDING_APPROVAL or REPLAN_REQUIRED)\n  - Audit log row (07 §4, STUDENT_APP source)\n  - Domain event emission (PLAN_ACCEPTED or PLAN_DECLINED, 03 §8.2)",
+        "operationId": "respond_to_case_api_v1_students_me_case_respond_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentDecisionResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case not in PLAN_PROPOSED, or multiple proposed plans await a decision"
+          },
+          "400": {
+            "description": "No proposed plan awaiting a student decision"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/students/{student_id}": {
       "get": {
         "tags": [
@@ -854,6 +934,247 @@
           }
         }
       }
+    },
+    "/api/v1/admin/institutions": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "List Institutions",
+        "description": "List all registered institutions (System Admin view).\n\nReturns slug, name, and status for each tenant.",
+        "operationId": "list_institutions_api_v1_admin_institutions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InstitutionResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Institutions Api V1 Admin Institutions Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Create Institution",
+        "description": "Onboard a new college/institution into the ASPIRE platform.",
+        "operationId": "create_institution_api_v1_admin_institutions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/institutions/{institution_id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Get Institution",
+        "description": "Get a single institution with its current active rule values.",
+        "operationId": "get_institution_api_v1_admin_institutions__institution_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Institution Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update Institution",
+        "description": "Update institution details or status (e.g. SUSPENDED / ACTIVE).",
+        "operationId": "update_institution_api_v1_admin_institutions__institution_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Institution Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/institutions/{institution_id}/rules": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Update institution-specific rules and thresholds",
+        "description": "Update active rule values for an institution with audit trail.\n\nEnables Mother System to configure custom attendance cutoffs (e.g. 75% vs 80%),\ngrade thresholds, AI agent enablement, and escalation timelines per college.",
+        "operationId": "update_institution_rules_api_v1_admin_institutions__institution_id__rules_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institution_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Institution Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstitutionRulesUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstitutionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1513,6 +1834,244 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "InstitutionCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 2,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 2,
+            "title": "Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "InstitutionCreateRequest"
+      },
+      "InstitutionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstitutionRulesUpdate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "status"
+        ],
+        "title": "InstitutionResponse"
+      },
+      "InstitutionRulesUpdate": {
+        "properties": {
+          "attendance_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendance Threshold"
+          },
+          "grade_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade Threshold"
+          },
+          "ai_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Enabled"
+          },
+          "escalation_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Escalation Days"
+          }
+        },
+        "type": "object",
+        "title": "InstitutionRulesUpdate"
+      },
+      "InstitutionUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(ACTIVE|SUSPENDED)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "InstitutionUpdateRequest"
+      },
+      "InterventionPlanResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "case_id",
+          "status",
+          "created_by",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "InterventionPlanResponse"
+      },
+      "StudentCaseResponse": {
+        "properties": {
+          "case_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Case Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "urgency_band": {
+            "type": "string",
+            "title": "Urgency Band"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Opened At"
+          },
+          "current_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InterventionPlanResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_actions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Plan Actions",
+            "default": []
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "case_id",
+          "status",
+          "urgency_band",
+          "opened_at",
+          "next_step"
+        ],
+        "title": "StudentCaseResponse"
       },
       "StudentDecisionRequest": {
         "properties": {

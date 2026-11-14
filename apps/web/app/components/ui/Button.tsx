@@ -2,7 +2,7 @@
 
 import React from "react";
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
+type ButtonVariant = "primary" | "secondary" | "accent" | "danger" | "ghost";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -14,16 +14,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-medium shadow-lg shadow-indigo-500/25",
-  secondary: "bg-white/[0.05] hover:bg-white/[0.1] text-slate-200 border border-white/[0.08]",
+  primary: "bg-[#FFFFFF] hover:bg-white/90 text-[#08090A] font-medium shadow-sm",
+  secondary: "bg-white/[0.04] hover:bg-white/[0.08] text-[#D1D5DB] hover:text-white border border-white/[0.08]",
+  accent: "bg-[#5E6AD2] hover:bg-[#6875E3] text-white font-medium",
   danger: "bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30",
-  ghost: "bg-transparent hover:bg-white/[0.05] text-slate-300",
+  ghost: "bg-transparent hover:bg-white/[0.05] text-[#8A8F98] hover:text-[#F7F8F8]",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm rounded-lg",
-  md: "px-4 py-2.5 text-sm rounded-lg",
-  lg: "px-6 py-3 text-base rounded-xl",
+  sm: "h-7 px-2.5 text-xs rounded",
+  md: "h-8 px-3 text-[13px] rounded-md",
+  lg: "h-9 px-4 text-sm rounded-md",
 };
 
 export function Button({
@@ -42,8 +43,8 @@ export function Button({
   return (
     <button
       className={`
-        inline-flex items-center justify-center gap-2 font-medium rounded-lg
-        active:scale-[0.98] transition-all duration-200
+        inline-flex items-center justify-center gap-2 font-medium
+        active:scale-[0.98] transition-all duration-150
         disabled:opacity-50 disabled:cursor-not-allowed
         ${variantClasses[variant]} ${sizeClasses[size]} ${className}
       `}
@@ -51,7 +52,7 @@ export function Button({
       {...props}
     >
       {loading ? (
-        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" aria-hidden="true">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>

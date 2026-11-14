@@ -3,7 +3,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 
@@ -221,12 +221,40 @@ class CaseEscalateResponse(BaseModel):
     acted_at: datetime
 
 
+class InterventionPlanResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    case_id: UUID
+    status: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+class PlanActionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    type: str
+    description: str
+    status: str
+    created_at: datetime
+
+
+class StudentCaseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    case_id: UUID
+    status: str
+    urgency_band: str
+    opened_at: datetime
+    current_plan: Optional[InterventionPlanResponse] = None
+    plan_actions: list[dict[str, Any]] = []
+    next_step: str
+
+
 class CaseCloseResponse(BaseModel):
     """Mentor closure of a RESOLVED case (03 §10.2 RESOLVED → CLOSED)."""
     case_id: UUID
     case_status: str
     closed_at: datetime
-
 
 # --- Follow-up Schemas (ADR-004 §2.7) ---
 
@@ -271,3 +299,26 @@ class FollowUpResponse(BaseModel):
 
 class FollowUpCreateResponse(FollowUpResponse):
     """201 body for POST /cases/{case_id}/follow-ups."""
+
+class InstitutionCreateRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    slug: str = Field(min_length=2, max_length=100)
+
+class InstitutionUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    status: Optional[str] = Field(default=None, pattern="^(ACTIVE|SUSPENDED)$")
+
+class InstitutionRulesUpdate(BaseModel):
+    attendance_threshold: Optional[float] = None
+    grade_threshold: Optional[float] = None
+    ai_enabled: Optional[bool] = None
+    escalation_days: Optional[int] = None
+
+class InstitutionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    slug: str  # unique identifier, e.g. "bcrec-durgapur"
+    status: str
+    rules: Optional[InstitutionRulesUpdate] = None
+

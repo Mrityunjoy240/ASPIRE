@@ -1,174 +1,213 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import {
+  LayoutDashboard,
+  Inbox,
+  BarChart3,
+  Users,
+  Building2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ReactNode;
-  badge?: string;
-  badgeVariant?: "critical" | "warning" | "safe" | "pending";
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
-const navItems: NavItem[] = [
+interface NavSection {
+  title?: string;
+  items: {
+    href: string;
+    label: string;
+    badge?: string;
+    badgeVariant?: "rose" | "accent";
+    icon: React.ComponentType<{ className?: string }>;
+  }[];
+}
+
+const navSections: NavSection[] = [
   {
-    href: "/queue",
-    label: "Triage Queue",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 12h18" />
-        <path d="M3 6h18" />
-        <path d="M3 18h18" />
-        <path d="M19 6v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" />
-      </svg>
-    ),
-    badge: "10",
-    badgeVariant: "critical",
+    title: "Workspace",
+    items: [
+      {
+        href: "/",
+        label: "Command Center",
+        icon: LayoutDashboard,
+      },
+    ],
   },
   {
-    href: "/students",
-    label: "Students",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-    badge: "247",
-    badgeVariant: "safe",
+    title: "Intelligence",
+    items: [
+      {
+        href: "/queue",
+        label: "Triage Queue",
+        badge: "10",
+        badgeVariant: "rose",
+        icon: Inbox,
+      },
+      {
+        href: "/analytics",
+        label: "Risk Analytics",
+        icon: BarChart3,
+      },
+    ],
   },
   {
-    href: "/analytics",
-    label: "Analytics",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="16" />
-      </svg>
-    ),
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 1 4.6 9a1.65 1.65 0 0 0 .33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 1 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 1 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-    ),
+    title: "Operations",
+    items: [
+      {
+        href: "/students",
+        label: "Student Directory",
+        badge: "247",
+        badgeVariant: "accent",
+        icon: Users,
+      },
+      {
+        href: "/admin/institutions",
+        label: "Institutions & Rules",
+        icon: Building2,
+      },
+    ],
   },
 ];
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
 
   return (
     <aside
       className={`
-        fixed left-0 top-0 h-full z-40 border-r border-white/[0.08] bg-[#0E1422]/95 backdrop-blur-xl
-        transition-all duration-300 ease-out
+        fixed left-0 top-0 h-full z-40 border-r border-white/[0.08] bg-[#0D0E10]
+        flex flex-col transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] select-none
         ${collapsed ? "w-16" : "w-64"}
       `}
-      aria-label="Main navigation"
+      aria-label="Sidebar navigation"
     >
-      {/* Logo / Brand */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-white/[0.08]">
-        {!collapsed && (
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+      {/* Brand Header — Aligned exactly with Topbar h-14 */}
+      <div className="h-14 px-4 border-b border-white/[0.08] flex items-center justify-between">
+        {!collapsed ? (
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-6 h-6 rounded-md bg-[#5E6AD2] flex items-center justify-center text-white shadow-sm transition-transform group-hover:scale-105">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                 <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
               </svg>
             </div>
-            <span className="font-bold text-xl text-white tracking-tight">ASPIRE</span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm tracking-tight text-[#FFFFFF]">ASPIRE</span>
+              <span className="text-xs text-[#8A8F98] font-mono px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/[0.06]">
+                v1.0
+              </span>
+            </div>
+          </Link>
+        ) : (
+          <div className="w-full flex justify-center">
+            <div className="w-7 h-7 rounded-md bg-[#5E6AD2] flex items-center justify-center text-white shadow-sm">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
+              </svg>
+            </div>
           </div>
         )}
+
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-2 rounded-lg hover:bg-white/[0.05] transition-colors text-slate-400 hover:text-white"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-expanded={!collapsed}
+          onClick={onToggle}
+          className={`
+            p-1.5 rounded-md text-[#8A8F98] hover:text-[#FFFFFF] hover:bg-white/[0.06] transition-colors
+            ${collapsed ? "hidden" : "block"}
+          `}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label="Toggle sidebar"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {collapsed ? (
-              <polyline points="9 18 15 12 9 6" />
-            ) : (
-              <polyline points="15 18 9 12 15 6" />
-            )}
-          </svg>
+          <ChevronLeft className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1" role="navigation" aria-label="Main navigation">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== "/");
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`
-                flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200
-                ${isActive
-                  ? "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
-                  : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
-                }
-                ${collapsed ? "justify-center px-2" : ""}
-              `}
-              aria-current={isActive ? "page" : undefined}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="flex-shrink-0" aria-hidden="true">{item.icon}</span>
-              {!collapsed && (
-                <span className="font-medium text-sm truncate">{item.label}</span>
-              )}
-              {item.badge && !collapsed && (
-                <span className={`
-                  ml-auto px-2 py-0.5 rounded-full text-xs font-semibold font-mono border
-                  ${{
-                    critical: "text-rose-400 bg-rose-500/10 border-rose-500/30",
-                    warning: "text-amber-400 bg-amber-500/10 border-amber-500/30",
-                    safe: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
-                    pending: "text-sky-400 bg-sky-500/10 border-sky-500/30",
-                  }[item.badgeVariant || "pending"]}
-                `}>
-                {item.badge}
-              </span>
+      {/* Nav List */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5" role="navigation">
+        {navSections.map((section, idx) => (
+          <div key={idx} className="space-y-1">
+            {!collapsed && section.title && (
+              <div className="px-2.5 pb-1 text-xs font-semibold tracking-wider text-[#8A8F98] uppercase">
+                {section.title}
+              </div>
             )}
-            </Link>
-          );
-        })}
+            {section.items.map((item) => {
+              const isActive =
+                item.href === "/"
+                  ? pathname === "/"
+                  : pathname === item.href || pathname.startsWith(item.href + "/");
+
+              const Icon = item.icon;
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={collapsed ? item.label : undefined}
+                  className={`
+                    group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-120
+                    ${
+                      isActive
+                        ? "bg-[#1C1D22] text-[#FFFFFF] border border-white/[0.10] shadow-sm"
+                        : "text-[#9DA3AE] hover:text-[#FFFFFF] hover:bg-white/[0.04] border border-transparent"
+                    }
+                    ${collapsed ? "justify-center px-1.5" : ""}
+                  `}
+                >
+                  <Icon
+                    className={`w-4 h-4 flex-shrink-0 transition-transform group-hover:scale-110 ${
+                      isActive ? "text-[#FFFFFF]" : "text-[#8A8F98] group-hover:text-[#FFFFFF]"
+                    }`}
+                  />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+
+                  {!collapsed && item.badge && (
+                    <span
+                      className={`
+                        ml-auto px-2 py-0.5 rounded-full text-xs font-mono font-semibold transition-transform group-hover:scale-105
+                        ${
+                          item.badgeVariant === "rose"
+                            ? "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                            : "bg-[#5E6AD2]/20 text-[#A5AEF6] border border-[#5E6AD2]/30"
+                        }
+                      `}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-3 border-t border-white/[0.08]">
-        {!collapsed && (
-          <div className="flex items-center gap-3 p-2 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-              </svg>
+      {/* Footer Institution info */}
+      <div className="p-3 border-t border-white/[0.08] bg-[#08090A]">
+        {!collapsed ? (
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#121316] border border-white/[0.07]">
+            <div className="w-7 h-7 rounded-md bg-white/[0.08] flex items-center justify-center text-xs font-mono font-bold text-white">
+              B
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-white text-sm truncate">ASPIRE Mentor</p>
-              <p className="text-xs text-slate-500 truncate">Mentor Dashboard</p>
+              <p className="text-sm font-semibold text-[#FFFFFF] truncate leading-tight">BCREC Durgapur</p>
+              <p className="text-xs text-[#8A8F98] font-mono truncate">Reference College</p>
             </div>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 linear-pulse-dot" />
           </div>
-        )}
-        {collapsed && (
-          <div className="flex items-center justify-center">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2" />
-              </svg>
-            </div>
-          </div>
+        ) : (
+          <button
+            onClick={onToggle}
+            className="w-full py-1.5 flex justify-center text-[#8A8F98] hover:text-[#FFFFFF]"
+            title="Expand sidebar"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         )}
       </div>
     </aside>

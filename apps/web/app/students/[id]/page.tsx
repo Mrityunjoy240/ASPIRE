@@ -1,11 +1,16 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import Link from "next/link";
 import { WebLayout } from "@/components/layout/WebLayout";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { ProgressRing } from "@/components/ui/ProgressRing";
+import { motion } from "motion/react";
+import {
+  ArrowLeft,
+  Clock,
+  BookOpen,
+  FileCheck,
+  ListTodo,
+} from "lucide-react";
 
 const STUDENT_DATA = {
   id: "STU-001",
@@ -15,8 +20,7 @@ const STUDENT_DATA = {
   programme: "B.Tech CSE (AIML)",
   semester: 5,
   email: "ananya.sharma@bcrec.ac.in",
-  phone: "+91 98765 43210",
-  mentor: "Dr. Ananya Sen",
+  mentor: "Dr. A. Sen",
   classTeacher: "Prof. R. Gupta",
   attendance: 73.3,
   attendanceRisk: "critical" as const,
@@ -28,286 +32,267 @@ const STUDENT_DATA = {
     { id: "cs503", name: "Operating Systems", code: "CS503", conducted: 26, attended: 17, threshold: 75, trend: "critical" },
   ],
   assessments: [
-    { component: "CIA-1", type: "CIA-1", maxMarks: 50, obtained: 34, status: "GRADED" },
-    { component: "Quiz 1", type: "QUIZ", maxMarks: 10, obtained: 0, status: "OFFICIAL_ZERO" },
-    { component: "Assignment 1", type: "ASSIGNMENT", maxMarks: 20, obtained: 18, status: "GRADED" },
-    { component: "Lab 1", type: "LAB", maxMarks: 30, obtained: 22, status: "GRADED" },
-    { component: "CIA-2", type: "CIA-2", maxMarks: 50, obtained: null, status: "SUBMITTED_PENDING_EVALUATION" },
-    { component: "ESE", type: "ESE", maxMarks: 100, obtained: null, status: "NOT_SCHEDULED" },
+    { component: "Continuous Assessment 1 (CIA-1)", type: "Internal Test", maxMarks: 50, obtained: 34, status: "GRADED" },
+    { component: "Module Quiz 1", type: "Quiz", maxMarks: 10, obtained: 0, status: "OFFICIAL_ZERO" },
+    { component: "Theory Assignment 1", type: "Assignment", maxMarks: 20, obtained: 18, status: "GRADED" },
+    { component: "OS Lab Practical 1", type: "Lab", maxMarks: 30, obtained: 22, status: "GRADED" },
+    { component: "Continuous Assessment 2 (CIA-2)", type: "Internal Test", maxMarks: 50, obtained: null, status: "PENDING_EVAL" },
   ],
   tasks: [
-    { id: "1", title: "Submit Math Assignment 2", source: "Assessment", deadline: "Tomorrow 23:59", duration: "45 min", priority: "high", status: "pending" },
-    { id: "2", title: "Review Module 3 Notes - Normalization", source: "AI Plan", deadline: "Today 22:00", duration: "60 min", priority: "high", status: "pending" },
-    { id: "3", title: "DBMS Recovery: Attend next 3 classes", source: "AI Plan", deadline: "This week", duration: "3 sessions", priority: "critical", status: "pending" },
-    { id: "4", title: "CN Lab Report - Week 2", source: "Calendar", deadline: "Friday 17:00", duration: "90 min", priority: "medium", status: "completed" },
+    { id: "1", title: "Submit DBMS Assignment 2", source: "Faculty Task", deadline: "Tomorrow 23:59", priority: "critical", status: "pending" },
+    { id: "2", title: "Review B-Tree & Normalization Module", source: "AI Recovery Plan", deadline: "Today 22:00", priority: "high", status: "pending" },
+    { id: "3", title: "Comp Networks: Attend next 3 lectures", source: "AI Recovery Plan", deadline: "This week", priority: "critical", status: "pending" },
+    { id: "4", title: "OS Process Sync Report", source: "Coursework", deadline: "Completed", priority: "medium", status: "completed" },
   ],
   interventionCases: [
-    { id: "CAS-BCREC-2026-0042", status: "PENDING_APPROVAL", urgency: "critical" as const, openedAt: "2026-10-07T09:30:00Z" },
+    { id: "CAS-BCREC-2026-0042", status: "PENDING_APPROVAL", urgency: "URGENT", openedAt: "2026-10-07T09:30:00Z" },
   ],
 };
 
-function getRiskVariant(risk: string) {
-  switch (risk) {
-    case "critical": return "critical";
-    case "warning": return "warning";
-    default: return "safe";
-  }
-}
-
-function getStatusColor(status: string) {
-  switch (status) {
-    case "GRADED": return "text-emerald-400";
-    case "SUBMITTED_PENDING_EVALUATION": return "text-sky-400";
-    case "OFFICIAL_ZERO": return "text-rose-400";
-    case "WITHHELD": return "text-amber-400";
-    case "CANCELLED": return "text-slate-400";
-    case "NOT_SCHEDULED": return "text-slate-400";
-    default: return "text-slate-400";
-  }
-}
-
-function getStatusBadge(status: string) {
-  const statusMap: Record<string, { label: string; variant: "critical" | "warning" | "safe" | "pending" | "overdue" | "pending-approval" }> = {
-    "PENDING_APPROVAL": { label: "PENDING APPROVAL", variant: "pending-approval" },
-    "PLAN_PROPOSED": { label: "PLAN PROPOSED", variant: "pending" },
-    "IN_REVIEW": { label: "IN REVIEW", variant: "pending" },
-    "OPEN": { label: "OPEN", variant: "warning" },
-    "MONITORING": { label: "MONITORING", variant: "safe" },
-    "ACTIVE": { label: "ACTIVE", variant: "safe" },
-    "ESCALATION_REQUIRED": { label: "ESCALATION", variant: "critical" },
-  };
-  const s = statusMap[status] || { label: status, variant: "warning" };
-  return <StatusBadge variant={s.variant}>{s.label}</StatusBadge>;
-}
-
 export default function StudentDetailPage() {
+  const [activeTab, setActiveTab] = useState<"overview" | "attendance" | "assessments" | "tasks">("overview");
   const student = STUDENT_DATA;
+
+  const tabs = [
+    { id: "overview", label: "Overview & Subjects", icon: BookOpen },
+    { id: "attendance", label: "Attendance Decay", icon: Clock },
+    { id: "assessments", label: "Assessment Results", icon: FileCheck },
+    { id: "tasks", label: "Intervention Tasks", icon: ListTodo },
+  ];
 
   return (
     <WebLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">AS</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-page-title">{student.name}</h1>
-                <StatusBadge variant={getRiskVariant(student.attendanceRisk)} showPulse={student.attendanceRisk === "critical"}>
-                  {student.attendanceRisk.toUpperCase()} RISK
-                </StatusBadge>
-              </div>
-              <p className="text-body text-slate-400">{student.rollNo} · {student.programme} · Semester {student.semester}</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => console.log("Message Mentor")}>
-              Message Mentor
-            </Button>
-            <Button variant="primary" onClick={() => console.log("Create Plan")}>
-              Create Plan
-            </Button>
-          </div>
-        </header>
-
-        {/* Key Metrics Row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-micro text-slate-500">Attendance</p>
-                <p className="text-3xl font-extrabold font-mono text-rose-400">{student.attendance}%</p>
-              </div>
-              <ProgressRing progress={student.attendance} size={60} strokeWidth={6} variant="critical" showLabel />
-            </div>
-          </Card>
-          <Card>
-            <p className="text-micro text-slate-500 mb-2">Assessment Trend</p>
-            <div className="flex items-center gap-4">
-              <p className="text-3xl font-extrabold font-mono text-amber-400">{student.assessmentTrend.charAt(0).toUpperCase() + student.assessmentTrend.slice(1)}</p>
-              <span className="text-micro text-slate-500">-2.1% last week</span>
-            </div>
-          </Card>
-          <Card>
-            <p className="text-micro text-slate-500 mb-2">Overdue Tasks</p>
-            <div className="flex items-center gap-4">
-              <p className="text-3xl font-extrabold font-mono text-rose-400">{student.overdueTasks}</p>
-              <StatusBadge variant="warning" showPulse={false}>Overdue</StatusBadge>
-            </div>
-          </Card>
-          <Card>
-            <p className="text-micro text-slate-500 mb-2">Active Cases</p>
-            <div className="flex items-center gap-4">
-              <p className="text-3xl font-extrabold font-mono text-rose-400">1</p>
-              <StatusBadge variant="pending-approval">PENDING APPROVAL</StatusBadge>
-            </div>
-          </Card>
+      <div className="space-y-6 page-enter max-w-5xl mx-auto">
+        {/* Breadcrumb & Navigation */}
+        <div className="flex items-center gap-2 text-xs text-[#9DA3AE]">
+          <Link href="/students" className="hover:text-white transition-colors flex items-center gap-1.5 font-medium">
+            <ArrowLeft className="w-4 h-4" />
+            <span>Student Directory</span>
+          </Link>
+          <span>/</span>
+          <span className="text-[#FFFFFF] font-mono font-semibold">{student.rollNo}</span>
         </div>
 
-          {/* Tabs Navigation */}
-          <div className="flex gap-2 border-b border-white/[0.08] mb-6">
-            {["Overview", "Attendance", "Assessments", "Tasks", "Interventions"].map((tab) => (
-              <button key={tab} className="px-4 py-3 text-sm font-medium text-slate-400 hover:text-white border-b-2 border-transparent hover:border-indigo-500 transition-colors">
-                {tab}
+        {/* Header - Linear Style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 pb-5 border-b border-white/[0.08]">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-md bg-[#16171A] border border-white/[0.12] flex items-center justify-center text-sm font-semibold text-[#FFFFFF] font-mono shadow-sm">
+              AS
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-xl font-bold tracking-tight text-[#FFFFFF]">
+                  {student.name}
+                </h1>
+                <span className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 linear-pulse-dot" />
+                  CRITICAL RISK
+                </span>
+              </div>
+              <p className="text-sm text-[#9DA3AE]">
+                {student.programme} · Batch {student.batch} · Semester {student.semester}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/queue"
+              className="h-8 px-3 text-[13px] font-medium bg-[#FFFFFF] hover:bg-white/90 text-[#08090A] rounded-lg transition-all active:scale-[0.98] shadow-sm flex items-center"
+            >
+              Review Active Plan
+            </Link>
+          </div>
+        </div>
+
+        {/* 4 Key Stat Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">Aggregate Attendance</div>
+            <div className="text-xl font-bold font-mono text-rose-400">
+              {student.attendance}%
+            </div>
+            <div className="text-xs text-[#8A8F98]">Min 75% required</div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">Academic Trend</div>
+            <div className="text-xl font-bold font-mono text-amber-400">
+              ↓ Declining
+            </div>
+            <div className="text-xs text-[#8A8F98]">CIA-1 avg decay -2.4%</div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">Overdue Tasks</div>
+            <div className="text-xl font-bold font-mono text-rose-400">
+              {student.overdueTasks}
+            </div>
+            <div className="text-xs text-[#8A8F98]">Recovery tasks pending</div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">Mentor Case</div>
+            <div className="text-base font-semibold font-mono text-[#A5AEF6] mt-1">
+              PENDING APPROVAL
+            </div>
+            <div className="text-xs text-[#8A8F98]">Assigned to {student.mentor}</div>
+          </div>
+        </div>
+
+        {/* Tab Navigation with Linear-style sliding motion indicator */}
+        <div className="flex items-center gap-1 border-b border-white/[0.08]">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                className={`relative px-3.5 py-2.5 text-xs font-medium transition-colors flex items-center gap-2 ${
+                  isActive
+                    ? "text-[#FFFFFF]"
+                    : "text-[#9DA3AE] hover:text-[#FFFFFF]"
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isActive ? "text-[#5E6AD2]" : "text-[#8A8F98]"}`} />
+                <span>{tab.label}</span>
+                {isActive && (
+                  <motion.div
+                    layoutId="linearTabActiveIndicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5E6AD2]"
+                    transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                  />
+                )}
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          {/* Content Sections */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Left Column - Attendance & Assessments */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Attendance Section */}
-              <Card>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-section-heading">Course Attendance</h3>
-                  <Button size="sm" variant="ghost">View All</Button>
-                </div>
-                <div className="space-y-3">
-                  {student.courses.map((course) => {
-                    const pct = (course.attended / course.conducted) * 100;
-                    const variant: "safe" | "warning" | "critical" = pct >= course.threshold ? "safe" : pct >= course.threshold - 5 ? "warning" : "critical";
-                    return (
-                      <div key={course.id} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h4 className="font-semibold text-white truncate">{course.name}</h4>
-                              <span className="text-micro text-slate-500">{course.code}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-slate-400">
-                              <span>{course.attended}/{course.conducted} classes</span>
-                              <StatusBadge variant={variant} showPulse={variant === "critical"}>
-                                {pct.toFixed(1)}%
-                              </StatusBadge>
-                            </div>
-                          </div>
-                          <ProgressRing progress={pct} size={60} strokeWidth={6} variant={variant} showLabel />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-
-              {/* Assessments Section */}
-              <Card>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-section-heading">Assessment Components</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/[0.08]">
-                        <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Component</th>
-                        <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Type</th>
-                        <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Max Marks</th>
-                        <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Obtained</th>
-                        <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
-                      {student.assessments.map((a) => (
-                        <tr key={a.component}>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-white">{a.component}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-micro text-slate-400">{a.type}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-white">{a.maxMarks}</td>
-                          <td className="px-4 py-3 text-right font-mono">
-                            {a.obtained !== null ? <span className="text-white">{a.obtained}</span> : <span className="text-slate-400"></span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold font-mono border ${getStatusColor(a.status)}`}>
-                              {a.status.replace("_", " ")}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
+        {/* Tab Content Panels */}
+        <div className="space-y-6">
+          {/* Course Attendance List */}
+          <div className="rounded-xl border border-white/[0.08] bg-[#121316] overflow-hidden shadow-sm">
+            <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[#FFFFFF] font-mono">
+                Course-wise Attendance & Recovery Math
+              </h2>
+              <span className="text-xs font-mono text-[#9DA3AE]">Deterministic Engine Projection</span>
             </div>
 
-            {/* Right Column - Tasks & Interventions */}
-            <div className="space-y-6">
-              {/* Tasks */}
-              <Card>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-section-heading">Active Tasks</h3>
-                  <Button size="sm" variant="ghost">View All</Button>
-                </div>
-                <div className="space-y-3">
-                  {student.tasks.map((task) => (
-                    <div key={task.id} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold text-white truncate">{task.title}</h4>
-                            <StatusBadge variant={task.priority === "critical" ? "critical" : task.priority === "high" ? "warning" : "safe"} showPulse={task.priority === "critical"}>
-                              {task.priority}
-                            </StatusBadge>
-                          </div>
-                          <p className="text-body text-slate-400 text-sm mb-2">{task.source}</p>
-                          <div className="flex items-center gap-4 text-xs text-slate-400">
-                            <span className="flex items-center gap-1">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-500">
-                                <circle cx="12" cy="12" r="10" />
-                                <polyline points="12 6 12 12 16 14" />
-                              </svg>
-                              {task.deadline}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-500">
-                                <circle cx="12" cy="12" r="10" />
-                                <path d="M12 6v6l4 2" />
-                              </svg>
-                              {task.duration}
-                            </span>
-                          </div>
-                        </div>
-                        <StatusBadge variant={task.status === "completed" ? "safe" : task.status === "snoozed" ? "warning" : "pending"} showPulse={false}>
-                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                        </StatusBadge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+            <div className="divide-y divide-white/[0.06]">
+              {student.courses.map((course) => {
+                const pct = ((course.attended / course.conducted) * 100).toFixed(1);
+                const isUnder = parseFloat(pct) < course.threshold;
 
-              {/* Intervention Cases */}
-              <Card>
-                <h3 className="text-section-heading mb-4">Intervention Cases</h3>
-                <div className="space-y-3">
-                  {student.interventionCases.map((caseItem) => (
-                    <div key={caseItem.id} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h4 className="font-semibold text-white">Case #{caseItem.id}</h4>
-                            <StatusBadge variant={caseItem.urgency} showPulse={caseItem.urgency === "critical"}>
-                              {caseItem.urgency.toUpperCase()}
-                            </StatusBadge>
-                            {getStatusBadge(caseItem.status)}
-                          </div>
-                          <p className="text-micro text-slate-500">Opened {new Date(caseItem.openedAt).toLocaleDateString()}</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="primary">Review</Button>
-                          <Button size="sm" variant="ghost">Details</Button>
-                        </div>
+                return (
+                  <div key={course.id} className="p-3 hover:bg-white/[0.02] transition-colors flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-semibold text-base text-[#FFFFFF]">{course.name}</span>
+                        <code className="text-xs font-mono text-[#9DA3AE] bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">{course.code}</code>
+                      </div>
+                      <div className="text-sm text-[#9DA3AE]">
+                        Attended <span className="text-white font-mono font-semibold">{course.attended}</span> of {course.conducted} lectures
                       </div>
                     </div>
-                  ))}
-                </div>
-              </Card>
+
+                    <div className="flex items-center gap-5">
+                      <div className="text-right">
+                        <div className={`font-mono font-bold text-base ${isUnder ? "text-rose-400" : "text-emerald-400"}`}>
+                          {pct}%
+                        </div>
+                        <div className="text-xs text-[#8A8F98] font-mono">Min {course.threshold}%</div>
+                      </div>
+
+                      <span
+                        className={`px-2.5 py-1 rounded-md text-xs font-mono font-semibold ${
+                          isUnder
+                            ? "bg-rose-500/15 text-rose-400 border border-rose-500/25"
+                            : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                        }`}
+                      >
+                        {isUnder ? "DETENTION RISK" : "COMPLIANT"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
+
+          {/* Assessment Components */}
+          <div className="rounded-xl border border-white/[0.08] bg-[#121316] overflow-hidden shadow-sm">
+            <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-[#FFFFFF] font-mono">
+                Continuous Evaluation & Assessment Log
+              </h2>
+              <span className="text-xs font-mono text-[#9DA3AE]">Verified Institutional Data</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse" role="table">
+                <thead>
+                  <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+                    <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                      Component
+                    </th>
+                    <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                      Category
+                    </th>
+                    <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                      Max Marks
+                    </th>
+                    <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                      Score Obtained
+                    </th>
+                    <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold pr-5">
+                      Evaluation State
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.06]">
+                  {student.assessments.map((a) => (
+                    <tr key={a.component} className="hover:bg-white/[0.03] transition-colors">
+                      <td className="py-2.5 px-3 font-semibold text-sm text-[#FFFFFF]">
+                        {a.component}
+                      </td>
+                      <td className="py-2.5 px-3 text-sm text-[#9DA3AE]">
+                        {a.type}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm text-[#ECEEF0]">
+                        {a.maxMarks}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm font-bold">
+                        {a.obtained !== null ? (
+                          <span className={a.obtained === 0 ? "text-rose-400" : "text-[#FFFFFF]"}>
+                            {a.obtained}
+                          </span>
+                        ) : (
+                          <span className="text-[#6E7480]">—</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-xs pr-5">
+                        <span
+                          className={`px-2.5 py-1 rounded-md font-semibold ${
+                            a.status === "GRADED"
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                              : a.status === "OFFICIAL_ZERO"
+                              ? "bg-rose-500/15 text-rose-400 border border-rose-500/25 font-bold"
+                              : "bg-white/[0.04] text-[#9DA3AE] border border-white/[0.08]"
+                          }`}
+                        >
+                          {a.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </WebLayout>
   );

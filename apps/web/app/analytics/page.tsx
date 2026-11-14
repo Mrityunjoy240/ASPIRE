@@ -2,9 +2,6 @@
 
 import React from "react";
 import { WebLayout } from "@/components/layout/WebLayout";
-import { Card } from "@/components/ui/Card";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Button } from "@/components/ui/Button";
 
 const ANALYTICS_DATA = {
   institution: {
@@ -16,26 +13,25 @@ const ANALYTICS_DATA = {
     safeStudents: 2046,
   },
   attendanceTrends: [
-    { month: "Jul", avgAttendance: 82.4, critical: 12, warning: 45 },
-    { month: "Aug", avgAttendance: 79.8, critical: 28, warning: 67 },
-    { month: "Sep", avgAttendance: 76.3, critical: 56, warning: 89 },
-    { month: "Oct", avgAttendance: 74.1, critical: 89, warning: 112 },
+    { month: "July", avgAttendance: 82.4, critical: 12, warning: 45 },
+    { month: "August", avgAttendance: 79.8, critical: 28, warning: 67 },
+    { month: "September", avgAttendance: 76.3, critical: 56, warning: 89 },
+    { month: "October", avgAttendance: 74.1, critical: 89, warning: 112 },
   ],
   programmeBreakdown: [
     { name: "CSE (AIML)", students: 456, critical: 45, warning: 67, avgAttendance: 74.2 },
-    { name: "CSE", students: 523, critical: 34, warning: 56, avgAttendance: 75.8 },
-    { name: "ECE", students: 389, critical: 28, warning: 41, avgAttendance: 77.1 },
-    { name: "EE", students: 298, critical: 22, warning: 34, avgAttendance: 78.5 },
-    { name: "ME", students: 412, critical: 31, warning: 48, avgAttendance: 76.3 },
-    { name: "CE", students: 345, critical: 27, warning: 39, avgAttendance: 77.8 },
-    { name: "IT", students: 324, critical: 23, warning: 35, avgAttendance: 78.1 },
+    { name: "Computer Science", students: 523, critical: 34, warning: 56, avgAttendance: 75.8 },
+    { name: "Electronics & Comm.", students: 389, critical: 28, warning: 41, avgAttendance: 77.1 },
+    { name: "Electrical Eng.", students: 298, critical: 22, warning: 34, avgAttendance: 78.5 },
+    { name: "Mechanical Eng.", students: 412, critical: 31, warning: 48, avgAttendance: 76.3 },
+    { name: "Civil Engineering", students: 345, critical: 27, warning: 39, avgAttendance: 77.8 },
+    { name: "Information Tech.", students: 324, critical: 23, warning: 35, avgAttendance: 78.1 },
   ],
   assessmentTrends: [
-    { component: "CIA-1", avgScore: 68.4, trend: "stable" },
-    { component: "CIA-2", avgScore: 71.2, trend: "improving" },
-    { component: "ESE (Projected)", avgScore: 65.8, trend: "declining" },
-    { component: "Lab", avgScore: 78.9, trend: "improving" },
-    { component: "Assignments", avgScore: 72.3, trend: "stable" },
+    { component: "Continuous Assessment 1 (CIA-1)", avgScore: 68.4, trend: "stable", weight: "20%" },
+    { component: "Continuous Assessment 2 (CIA-2)", avgScore: 71.2, trend: "improving", weight: "20%" },
+    { component: "End Semester Exam (Projected)", avgScore: 65.8, trend: "declining", weight: "50%" },
+    { component: "Laboratory Practical", avgScore: 78.9, trend: "improving", weight: "10%" },
   ],
   interventionStats: {
     totalCases: 234,
@@ -52,204 +48,228 @@ const ANALYTICS_DATA = {
 export default function AnalyticsPage() {
   return (
     <WebLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header */}
-        <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-          <div>
-            <h1 className="text-page-title">Analytics</h1>
-            <p className="text-body text-slate-400 mt-1">Institution-wide risk intelligence & trends</p>
+      <div className="space-y-6 page-enter">
+        {/* Header - Linear Style */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-white/[0.08]">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold tracking-tight text-[#FFFFFF]">
+                Institutional Risk Analytics
+              </h1>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-white/[0.05] text-[#ECEEF0] border border-white/[0.10]">
+                Real-time Aggregation
+              </span>
+            </div>
+            <p className="text-[13px] text-[#9DA3AE]">
+              Multi-cohort academic risk distribution, attendance decay trends, and intervention throughput
+            </p>
           </div>
-          <div className="flex gap-3">
-            <select className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:border-indigo-500/50">
-              <option value="30d">Last 30 days</option>
-              <option value="90d">Last 90 days</option>
-              <option value="semester">Current Semester</option>
-              <option value="year">Academic Year</option>
-            </select>
-            <Button variant="secondary">Export Report</Button>
-          </div>
-        </header>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-micro text-slate-500">Total Students</p>
-                <p className="text-3xl font-extrabold font-mono text-white">{ANALYTICS_DATA.institution.totalStudents.toLocaleString()}</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-indigo-400">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                </svg>
-              </div>
-            </div>
-          </Card>
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-micro text-slate-500">Critical Risk</p>
-                <p className="text-3xl font-extrabold font-mono text-rose-400">{ANALYTICS_DATA.institution.criticalRisk}</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-rose-500/20 flex items-center justify-center border border-rose-500/30">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-rose-400">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-              </div>
-            </div>
-          </Card>
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-micro text-slate-500">Warning Risk</p>
-                <p className="text-3xl font-extrabold font-mono text-amber-400">{ANALYTICS_DATA.institution.warningRisk}</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-400">
-                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                  <line x1="12" y1="9" x2="12" y2="13" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-              </div>
-            </div>
-          </Card>
-          <Card>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-micro text-slate-500">Safe Students</p>
-                <p className="text-3xl font-extrabold font-mono text-emerald-400">{ANALYTICS_DATA.institution.safeStudents}</p>
-              </div>
-              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
-              </div>
-            </div>
-          </Card>
+          <div className="flex items-center gap-2.5">
+            <select className="h-8 px-2.5 bg-[#121316] border border-white/[0.08] rounded-md text-xs text-[#ECEEF0] focus:outline-none focus:border-white/[0.2] transition-colors">
+              <option value="sem5">Current Semester (Sem 5)</option>
+              <option value="90d">Past 90 Days</option>
+              <option value="ay">Full Academic Year</option>
+            </select>
+            <button className="h-8 px-3 text-xs font-medium rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-[#ECEEF0] border border-white/[0.08] transition-colors flex items-center">
+              Export CSV
+            </button>
+          </div>
         </div>
 
-        {/* Charts Section */}
-        <div className="grid lg:grid-cols-2 gap-6 mb-6">
-          {/* Attendance Trend */}
-          <Card className="lg:col-span-2">
-            <h3 className="text-section-heading mb-4">Attendance Trend (Semester)</h3>
-            <div className="space-y-4">
-              {ANALYTICS_DATA.attendanceTrends.map((month) => (
-                <div key={month.month} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <span className="font-semibold text-white w-20">{month.month}</span>
-                      <div className="flex-1 h-2 bg-white/[0.08] rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500" style={{ width: `${month.avgAttendance}%` }} />
-                      </div>
+        {/* 4 Top Metric Cards with High Contrast & Micro Animations */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] hover:border-white/[0.16] transition-all duration-150 space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">Total Monitored</div>
+            <div className="text-2xl font-bold font-mono text-[#FFFFFF] tracking-tight">
+              {ANALYTICS_DATA.institution.totalStudents.toLocaleString()}
+            </div>
+            <div className="text-xs text-[#8A8F98] flex items-center gap-1.5">
+              <span>7 B.Tech Departments</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] hover:border-rose-500/30 transition-all duration-150 space-y-1.5 group">
+            <div className="text-xs font-mono uppercase tracking-wider text-rose-400 font-semibold flex items-center justify-between">
+              <span>Critical Risk (&lt; 75%)</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-400 linear-pulse-dot" />
+            </div>
+            <div className="text-2xl font-bold font-mono text-rose-400 tracking-tight">
+              {ANALYTICS_DATA.institution.criticalRisk}
+            </div>
+            <div className="text-xs text-[#9DA3AE]">
+              8.2% of cohort in detention danger
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] hover:border-amber-500/30 transition-all duration-150 space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold">
+              Warning Watchlist (75–80%)
+            </div>
+            <div className="text-2xl font-bold font-mono text-amber-400 tracking-tight">
+              {ANALYTICS_DATA.institution.warningRisk}
+            </div>
+            <div className="text-xs text-[#9DA3AE]">
+              19.9% approaching threshold
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl bg-[#121316] border border-white/[0.08] hover:border-emerald-500/30 transition-all duration-150 space-y-1.5">
+            <div className="text-xs font-mono uppercase tracking-wider text-emerald-400 font-semibold">
+              Safe & In Good Standing
+            </div>
+            <div className="text-2xl font-bold font-mono text-emerald-400 tracking-tight">
+              {ANALYTICS_DATA.institution.safeStudents.toLocaleString()}
+            </div>
+            <div className="text-xs text-[#9DA3AE]">
+              71.9% meet eligibility rules
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Monthly Attendance Decay Tracker */}
+          <div className="p-5 rounded-xl bg-[#121316] border border-white/[0.08] space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-[#FFFFFF] font-mono">
+                  Attendance Trajectory
+                </h2>
+                <p className="text-xs text-[#9DA3AE] mt-0.5">Semester progression by month</p>
+              </div>
+              <span className="text-xs font-mono text-rose-400 font-semibold">
+                -8.3% total decay
+              </span>
+            </div>
+
+            <div className="space-y-3.5">
+              {ANALYTICS_DATA.attendanceTrends.map((t) => (
+                <div key={t.month} className="space-y-1.5 group">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-semibold text-[#ECEEF0]">{t.month}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[#9DA3AE] text-xs">
+                        <span className="text-rose-400 font-mono font-semibold">{t.critical}</span> crit ·{" "}
+                        <span className="text-amber-400 font-mono font-semibold">{t.warning}</span> warn
+                      </span>
+                      <span className="font-mono font-bold text-[#FFFFFF] w-14 text-right">
+                        {t.avgAttendance}%
+                      </span>
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <span className="font-mono font-bold text-white">{month.avgAttendance}%</span>
-                      <StatusBadge variant="critical" showPulse={false}>{month.critical} Critical</StatusBadge>
-                      <StatusBadge variant="warning" showPulse={false}>{month.warning} Warning</StatusBadge>
-                    </div>
+                  </div>
+
+                  <div className="w-full h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        t.avgAttendance < 75
+                          ? "bg-rose-500"
+                          : t.avgAttendance < 80
+                          ? "bg-amber-400"
+                          : "bg-emerald-400"
+                      }`}
+                      style={{ width: `${t.avgAttendance}%` }}
+                    />
                   </div>
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
 
-          {/* Programme Breakdown */}
-          <Card className="lg:col-span-2">
-            <h3 className="text-section-heading mb-4">Programme Risk Breakdown</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-white/[0.08]">
-                    <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Programme</th>
-                    <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Students</th>
-                    <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Critical</th>
-                    <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Warning</th>
-                    <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Avg Attendance</th>
-                    <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold">Risk %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.04]">
-                  {ANALYTICS_DATA.programmeBreakdown.map((prog) => (
-                    <tr key={prog.name} className="hover:bg-white/[0.02]">
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-white">{prog.name}</p>
+          {/* Intervention Funnel Throughput */}
+          <div className="p-5 rounded-xl bg-[#121316] border border-white/[0.08] space-y-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-[#FFFFFF] font-mono">
+                  Intervention Case Pipeline
+                </h2>
+                <p className="text-xs text-[#9DA3AE] mt-0.5">234 Total detected cases</p>
+              </div>
+              <span className="text-xs font-mono text-emerald-400 font-semibold">
+                48 Resolved Successfully
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {[
+                { label: "OPEN CASES", val: ANALYTICS_DATA.interventionStats.open, border: "border-slate-500", text: "text-slate-200" },
+                { label: "IN REVIEW", val: ANALYTICS_DATA.interventionStats.inReview, border: "border-[#5E6AD2]", text: "text-[#A5AEF6]" },
+                { label: "PLAN PROPOSED", val: ANALYTICS_DATA.interventionStats.planProposed, border: "border-sky-400", text: "text-sky-400" },
+                { label: "PENDING APPROVAL", val: ANALYTICS_DATA.interventionStats.pendingApproval, border: "border-amber-400", text: "text-amber-400" },
+                { label: "ACTIVE INTERVENTIONS", val: ANALYTICS_DATA.interventionStats.active, border: "border-emerald-500", text: "text-emerald-400" },
+                { label: "RESOLVED & RECOVERED", val: ANALYTICS_DATA.interventionStats.resolved, border: "border-emerald-600", text: "text-emerald-300" },
+              ].map((s) => (
+                <div key={s.label} className={`p-3 rounded-lg bg-white/[0.02] border-l-2 ${s.border}`}>
+                  <div className="text-xs font-mono text-[#9DA3AE] truncate font-medium">{s.label}</div>
+                  <div className={`text-xl font-bold font-mono ${s.text} mt-1`}>{s.val}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Department / Programme Breakdown Table */}
+        <div className="rounded-xl border border-white/[0.08] bg-[#121316] overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b border-white/[0.08] flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-[#FFFFFF] font-mono">
+              Department Cohort Vulnerability Breakdown
+            </h2>
+            <span className="text-xs font-mono text-[#9DA3AE]">Sorted by Risk % (DESC)</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse" role="table">
+              <thead>
+                <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Programme
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Enrolled
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Critical
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Warning
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Avg Attendance
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold pr-5">
+                    Risk Ratio
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.06]">
+                {ANALYTICS_DATA.programmeBreakdown.map((prog) => {
+                  const riskRatio = (((prog.critical + prog.warning) / prog.students) * 100).toFixed(1);
+                  return (
+                    <tr key={prog.name} className="hover:bg-white/[0.03] transition-colors">
+                      <td className="py-2.5 px-3 font-semibold text-sm text-[#FFFFFF]">
+                        {prog.name}
                       </td>
-                      <td className="px-4 py-3 text-right font-mono text-slate-300">{prog.students}</td>
-                      <td className="px-4 py-3 text-right font-mono text-rose-400">{prog.critical}</td>
-                      <td className="px-4 py-3 text-right font-mono text-amber-400">{prog.warning}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-white">{prog.avgAttendance}%</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-mono text-rose-400">{(((prog.critical + prog.warning) / prog.students) * 100).toFixed(1)}%</span>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm text-[#ECEEF0]">
+                        {prog.students}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm font-bold text-rose-400">
+                        {prog.critical}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm font-bold text-amber-400">
+                        {prog.warning}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm font-medium text-[#ECEEF0]">
+                        {prog.avgAttendance}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-sm font-bold text-rose-400 pr-5">
+                        {riskRatio}%
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-        </div>
-
-        {/* Assessment Trends & Intervention Stats */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Card>
-            <h3 className="text-section-heading mb-4">Assessment Component Trends</h3>
-            <div className="space-y-3">
-              {ANALYTICS_DATA.assessmentTrends.map((comp) => (
-                <div key={comp.component} className="flex items-center justify-between p-3 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                  <div className="flex items-center gap-3">
-                    <span className="font-medium text-white">{comp.component}</span>
-                    <StatusBadge variant={comp.trend === "improving" ? "safe" : comp.trend === "declining" ? "warning" : "safe"} showPulse={false}>
-                      {comp.trend === "improving" ? "^ Improving" : comp.trend === "declining" ? "v Declining" : "-> Stable"}
-                    </StatusBadge>
-                  </div>
-                  <span className="font-mono font-bold text-white text-lg">{comp.avgScore}%</span>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="text-section-heading mb-4">Intervention Pipeline</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Total Cases</p>
-                <p className="text-3xl font-extrabold font-mono text-white">{ANALYTICS_DATA.interventionStats.totalCases}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Open</p>
-                <p className="text-2xl font-extrabold font-mono text-rose-400">{ANALYTICS_DATA.interventionStats.open}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">In Review</p>
-                <p className="text-2xl font-extrabold font-mono text-amber-400">{ANALYTICS_DATA.interventionStats.inReview}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Plan Proposed</p>
-                <p className="text-2xl font-extrabold font-mono text-sky-400">{ANALYTICS_DATA.interventionStats.planProposed}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Pending Approval</p>
-                <p className="text-2xl font-extrabold font-mono text-sky-400">{ANALYTICS_DATA.interventionStats.pendingApproval}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Active</p>
-                <p className="text-2xl font-extrabold font-mono text-emerald-400">{ANALYTICS_DATA.interventionStats.active}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Resolved</p>
-                <p className="text-2xl font-extrabold font-mono text-emerald-400">{ANALYTICS_DATA.interventionStats.resolved}</p>
-              </div>
-              <div className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.04]">
-                <p className="text-micro text-slate-500">Escalated</p>
-                <p className="text-2xl font-extrabold font-mono text-rose-400">{ANALYTICS_DATA.interventionStats.escalated}</p>
-              </div>
-            </div>
-          </Card>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </WebLayout>

@@ -9,12 +9,27 @@
 
 ### Current Phase
 
-**Mother System / Mother Application Foundation**
+**Mother System / Core Multi-Tenant Platform Completion**
 
-ASPIRE is structured as ONE unified product ecosystem:
-1. **ASPIRE Mother Application (Web):** The primary human-facing operational & management control application (System Admin, Institution Admin, HOD, Faculty, Mentors) built in Next.js 15 App Router.
-2. **ASPIRE Core Platform (Backend & Intelligence):** Centralized FastAPI service, database persistence, deterministic rule engines, LangGraph agent orchestrator, and OpenAPI contracts.
-3. **Clients (Web & Native Android):** Student Web, Faculty Web, and external Native Android applications (Kotlin/Compose built separately in Android Studio).
+Current Goal: Complete the closed-loop intervention cycle for a P0 demo student and enable multi-institution control from the Mother System.
+
+**Status:**
+- **R1-R4 (Foundation):** ✅ Completed and Committed.
+- **R5 (Case Approval & Rejection Loop):** ✅ Completed and Committed.
+- **R6 (Student Self-Decision Loop API):** ✅ Completed.
+  - Implemented `GET /api/v1/students/me/case` and `POST /api/v1/students/me/case/respond` with own-profile verification and state locking.
+  - Verified via `tests/test_student_loop.py` (mock and live PostgreSQL paths).
+- **Multi-Tenant Mother System Core:** ✅ Completed.
+  - Implemented `GET /api/v1/admin/institutions`, `POST /api/v1/admin/institutions` (onboarding new colleges), `GET/PATCH /api/v1/admin/institutions/{id}`, and `PATCH /api/v1/admin/institutions/{id}/rules` (configurable attendance/grade thresholds per college with audit log).
+  - Verified via `tests/test_admin_institutions.py` (role guards, CRUD, rule persistence, audit).
+  - Regenerated `contracts/openapi.json` with 20 paths.
+  - Restored `apps/web/app/queue/page.tsx` and removed temporary artifacts.
+  - Verified: TypeScript 0 errors, ESLint 0 errors, Next.js 15 production build ✓.
+- **Institutional Database & Knowledge Base Integration:** ✅ Completed.
+  - Integrated BCREC Central multi-schema institutional database into `db/institutional/` (19 SQL migrations, 108 entities covering IAM, Governance, Academics, Students, Faculty, Attendance, Assessments, Exams, and API Keys).
+  - Integrated institutional knowledge chunks into `data/knowledge/` (`chunks.jsonl` + `manifest.json`) for curriculum & syllabus retrieval.
+  - Created automated bridge script `db/seed_aspire_from_institutional.py` syncing BCREC catalog directly to ASPIRE Core.
+  - Polished Mother Application web UI (`apps/web`) to full Linear-inspired medium density with high contrast, crisp typography, and responsive micro-interactions.
 
 ---
 

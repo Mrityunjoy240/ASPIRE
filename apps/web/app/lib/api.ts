@@ -5,6 +5,24 @@
 // Frontend never contains business logic — it only calls Core API contracts
 // (AGENTS.md: clients must not duplicate core business logic).
 
+import {
+  CaseQueueItem,
+  CaseQueueItemResponse,
+  CaseApproveRequest,
+  CaseApproveResponse,
+  Institution,
+  InstitutionRules,
+} from './types';
+
+export type {
+  CaseQueueItem,
+  CaseQueueItemResponse,
+  CaseApproveRequest,
+  CaseApproveResponse,
+  Institution,
+  InstitutionRules,
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const TOKEN_STORAGE_KEY = "aspire_token";
@@ -65,32 +83,14 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-// --- Contract types (mirror contracts/openapi.json) ---
+// --- Mentor Queue ---
 
-export interface CaseQueueItem {
-  case_id: string;
-  student_id: string;
-  student_name: string;
-  student_roll: string;
-  urgency_band: string;
-  status: string;
-  trigger_events: string[];
-  opened_at: string;
-  nearest_exam_days: number | null;
-  days_since_last_action: number | null;
+export function fetchCaseQueue(): Promise<CaseQueueItemResponse[]> {
+  return apiFetch<CaseQueueItemResponse[]>("/api/v1/cases/queue");
 }
 
-export interface CaseApproveResponse {
-  case_id: string;
-  mentor_decision: "APPROVED" | "EDITED" | "REJECTED";
-  acted_at: string;
-}
-
-// --- Endpoints ---
-
-export function fetchCaseQueue(): Promise<CaseQueueItem[]> {
-  return apiFetch<CaseQueueItem[]>("/api/v1/cases/queue");
-}
+/** Alias used by the new queue page */
+export const fetchMentorQueue = fetchCaseQueue;
 
 export function approveCase(
   caseId: string,
@@ -100,5 +100,21 @@ export function approveCase(
   return apiFetch<CaseApproveResponse>(`/api/v1/cases/${caseId}/approve`, {
     method: "POST",
     body: JSON.stringify({ decision, mentor_notes: mentorNotes ?? null }),
+  });
+}
+
+// --- Admin: Institution Management ---
+
+export function fetchInstitutions(): Promise<Institution[]> {
+  return apiFetch<Institution[]>("/api/v1/admin/institutions");
+}
+
+export function updateInstitutionRules(
+  institutionId: string,
+  rules: Partial<InstitutionRules>
+): Promise<Institution> {
+  return apiFetch<Institution>(`/api/v1/admin/institutions/${institutionId}/rules`, {
+    method: "PATCH",
+    body: JSON.stringify(rules),
   });
 }

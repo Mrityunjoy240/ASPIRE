@@ -59,11 +59,15 @@ Observe → Understand → Detect → Plan → Assist → Verify → Replan → 
 ## Monorepo Structure
 
 ```
-apps/web/        ← Mentor, admin, faculty web workspace (Next.js 15)
-apps/mobile/     ← Student mobile app (Next.js 15 PWA)
-packages/
-  database/      ← db/migrations (SQL schema) + services/api/db (SQLAlchemy); seeds in db/seeds/
-  shared/        ← Engines, agents, LLMService, audit (shared TypeScript)
+apps/web/        ← Mother Application: Admin/Faculty/Mentor management workspace (Next.js 15)
+apps/mobile/     ← Student mobile web client (Next.js 15 PWA)
+app/             ← FastAPI Modular Monolith (Core Platform, Rule Engines, Agents, Repositories)
+db/
+  migrations/    ← ASPIRE Core Platform migrations (Cases, Interventions, LLM Audit, Scheduler)
+  institutional/ ← BCREC Central Multi-College Database (108 entities, 19 migrations: IAM, Academics, Attendance, Assessment, Exams)
+data/
+  knowledge/     ← Academic knowledge base chunks (syllabi, course curricula, rules)
+contracts/       ← Committed OpenAPI specification (openapi.json)
 docs/            ← All spec documents (source of truth)
 ```
 

@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { WebLayout } from "@/components/layout/WebLayout";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Search } from "lucide-react";
 
 const STUDENTS = [
   {
@@ -121,30 +120,14 @@ const STUDENTS = [
   },
 ];
 
-function getRiskVariant(risk: string) {
-  switch (risk) {
-    case "critical": return "critical";
-    case "warning": return "warning";
-    default: return "safe";
-  }
-}
-
-function getTrendBadge(trend: string) {
-  switch (trend) {
-    case "improving": return <StatusBadge variant="safe" showPulse={false}>↑ Improving</StatusBadge>;
-    case "stable": return <StatusBadge variant="safe" showPulse={false}>→ Stable</StatusBadge>;
-    case "declining": return <StatusBadge variant="warning" showPulse={true}>↓ Declining</StatusBadge>;
-    default: return <StatusBadge variant="safe" showPulse={false}>—</StatusBadge>;
-  }
-}
-
 export default function StudentsPage() {
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState<"all" | "critical" | "warning" | "safe">("all");
   const [sortBy, setSortBy] = useState<"name" | "attendance" | "risk">("risk");
 
   const filteredStudents = STUDENTS.filter((student) => {
-    const matchesSearch = student.name.toLowerCase().includes(search.toLowerCase()) ||
+    const matchesSearch =
+      student.name.toLowerCase().includes(search.toLowerCase()) ||
       student.rollNo.toLowerCase().includes(search.toLowerCase());
     const matchesRisk = riskFilter === "all" || student.attendanceRisk === riskFilter;
     return matchesSearch && matchesRisk;
@@ -155,153 +138,207 @@ export default function StudentsPage() {
     return riskOrder[a.attendanceRisk] - riskOrder[b.attendanceRisk];
   });
 
-  const criticalCount = STUDENTS.filter(s => s.attendanceRisk === "critical").length;
-  const warningCount = STUDENTS.filter(s => s.attendanceRisk === "warning").length;
-  const safeCount = STUDENTS.filter(s => s.attendanceRisk === "safe").length;
+  const criticalCount = STUDENTS.filter((s) => s.attendanceRisk === "critical").length;
+  const warningCount = STUDENTS.filter((s) => s.attendanceRisk === "warning").length;
+  const safeCount = STUDENTS.filter((s) => s.attendanceRisk === "safe").length;
 
   return (
     <WebLayout>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header with Metrics */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-          <div>
-            <h1 className="text-page-title">Students</h1>
-            <p className="text-body text-slate-400 mt-1">Monitor student risk signals across all programmes</p>
+      <div className="space-y-5 page-enter">
+        {/* Header Toolbar */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-5 border-b border-white/[0.08]">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <h1 className="text-xl font-bold tracking-tight text-[#FFFFFF]">
+                Student Directory
+              </h1>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-white/[0.05] text-[#ECEEF0] border border-white/[0.10]">
+                {STUDENTS.length} Tracked
+              </span>
+            </div>
+            <p className="text-[13px] text-[#9DA3AE]">
+              Deterministic attendance & academic progress across institutional cohorts
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-rose-400">{criticalCount}</div>
-              <div className="text-micro text-slate-500">Critical Risk</div>
-            </div>
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-amber-400">{warningCount}</div>
-              <div className="text-micro text-slate-500">Warning</div>
-            </div>
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-emerald-400">{safeCount}</div>
-              <div className="text-micro text-slate-500">Safe</div>
-            </div>
-            <div className="glass-card px-4 py-3">
-              <div className="text-2xl font-extrabold font-mono text-indigo-400">{STUDENTS.length}</div>
-              <div className="text-micro text-slate-500">Total</div>
-            </div>
+
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="px-2.5 py-1 rounded-md bg-[#121316] border border-white/[0.08] text-rose-400 font-semibold">
+              {criticalCount} Critical
+            </span>
+            <span className="px-2.5 py-1 rounded-md bg-[#121316] border border-white/[0.08] text-amber-400 font-semibold">
+              {warningCount} Warning
+            </span>
+            <span className="px-2.5 py-1 rounded-md bg-[#121316] border border-white/[0.08] text-emerald-400 font-semibold">
+              {safeCount} Safe
+            </span>
           </div>
         </div>
 
-        {/* Filters */}
-        <Card className="mb-6">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search by name or roll number..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50"
-              />
-            </div>
-            <div className="flex gap-2">
-              <select
-                value={riskFilter}
-                onChange={(e) => setRiskFilter(e.target.value as "all" | "critical" | "warning" | "safe")}
-                className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
-              >
-                <option value="all">All Risk Levels</option>
-                <option value="critical">Critical Only</option>
-                <option value="warning">Warning Only</option>
-                <option value="safe">Safe Only</option>
-              </select>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as "name" | "attendance" | "risk")}
-                className="px-4 py-2.5 bg-white/[0.03] border border-white/[0.08] rounded-lg text-white focus:outline-none focus:border-indigo-500/50"
-              >
-                <option value="risk">Sort by Risk</option>
-                <option value="name">Sort by Name</option>
-                <option value="attendance">Sort by Attendance</option>
-              </select>
-            </div>
+        {/* Filter Toolbar */}
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <div className="relative flex-1 w-full">
+            <Search className="w-4 h-4 text-[#8A8F98] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Filter by student name or roll number..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-8 pl-8 pr-2.5 bg-[#121316] border border-white/[0.08] rounded-md text-[13px] text-[#FFFFFF] placeholder-[#6E7480] focus:outline-none focus:border-white/[0.2] transition-colors"
+            />
           </div>
-        </Card>
 
-        {/* Student Table */}
-        <Card>
+          <div className="flex items-center gap-2.5 w-full sm:w-auto">
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value as "all" | "critical" | "warning" | "safe")}
+              className="h-8 px-2.5 bg-[#121316] border border-white/[0.08] rounded-md text-xs text-[#ECEEF0] focus:outline-none focus:border-white/[0.2] transition-colors"
+            >
+              <option value="all">All Risk Bands</option>
+              <option value="critical">Critical (&lt; 75%)</option>
+              <option value="warning">Warning (75–80%)</option>
+              <option value="safe">Safe (&gt; 80%)</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as "name" | "attendance" | "risk")}
+              className="h-8 px-2.5 bg-[#121316] border border-white/[0.08] rounded-md text-xs text-[#ECEEF0] focus:outline-none focus:border-white/[0.2] transition-colors"
+            >
+              <option value="risk">Sort by Risk</option>
+              <option value="attendance">Sort by Attendance</option>
+              <option value="name">Sort by Name</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="rounded-xl border border-white/[0.08] bg-[#121316] overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full" role="table">
+            <table className="w-full text-left border-collapse" role="table">
               <thead>
-                <tr className="border-b border-white/[0.08]">
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Student</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Roll No</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Programme</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Attendance</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Risk</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Assessment</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Overdue</th>
-                  <th className="px-4 py-3 text-left text-micro text-slate-500 uppercase tracking-wider font-semibold">Mentor</th>
-                  <th className="px-4 py-3 text-right text-micro text-slate-500 uppercase tracking-wider font-semibold pr-4">Actions</th>
+                <tr className="border-b border-white/[0.08] bg-white/[0.02]">
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Student
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Roll Number
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Programme
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Attendance
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Assessment
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Tasks
+                  </th>
+                  <th className="py-2.5 px-3 text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold">
+                    Mentor
+                  </th>
+                  <th className="py-3 px-4 text-right text-xs font-mono uppercase tracking-wider text-[#9DA3AE] font-semibold pr-5">
+                    Action
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-4">
-                      <div>
-                        <p className="font-semibold text-white">{student.name}</p>
-                        <p className="text-micro text-slate-500">Batch {student.batch} · Sem {student.semester}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <code className="font-mono text-slate-300">{student.rollNo}</code>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="text-sm text-slate-300 truncate max-w-xs">{student.programme}</p>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-mono font-bold ${student.attendance < 75 ? "text-rose-400" : student.attendance < 80 ? "text-amber-400" : "text-emerald-400"}`}>
-                          {student.attendance}%
+              <tbody className="divide-y divide-white/[0.06]">
+                {filteredStudents.map((student) => {
+                  return (
+                    <tr
+                      key={student.id}
+                      className="hover:bg-white/[0.03] transition-colors group"
+                    >
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-sm text-[#FFFFFF] group-hover:text-white transition-colors">
+                          {student.name}
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <code className="font-mono text-xs text-[#9DA3AE] bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.06]">
+                          {student.rollNo}
+                        </code>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-sm text-[#ECEEF0]">
+                        <span>{student.programme}</span>
+                        <span className="text-[#8A8F98] ml-1.5 font-mono text-xs">
+                          S{student.semester}
                         </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <StatusBadge variant={getRiskVariant(student.attendanceRisk)} showPulse={student.attendanceRisk === "critical"}>
-                        {student.attendanceRisk.toUpperCase()}
-                      </StatusBadge>
-                    </td>
-                    <td className="px-4 py-4">
-                      {getTrendBadge(student.assessmentTrend)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-semibold ${
-                        student.overdueTasks > 0 ? "text-rose-400 bg-rose-500/10 border-rose-500/30 border" :
-                        "text-emerald-400 bg-emerald-500/10 border-emerald-500/30 border"
-                      }`}>
-                        {student.overdueTasks} overdue
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <p className="text-sm text-slate-300">{student.mentor}</p>
-                    </td>
-                    <td className="px-4 py-4 pr-4">
-                      <div className="flex items-center gap-2 justify-end">
-                        <Button size="sm" variant="ghost" onClick={() => console.log("View", student.id)}>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`font-mono font-bold text-sm ${
+                              student.attendance < 75
+                                ? "text-rose-400"
+                                : student.attendance < 80
+                                ? "text-amber-400"
+                                : "text-emerald-400"
+                            }`}
+                          >
+                            {student.attendance}%
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-md text-xs font-mono uppercase font-semibold ${
+                              student.attendanceRisk === "critical"
+                                ? "bg-rose-500/15 text-rose-400 border border-rose-500/25"
+                                : student.attendanceRisk === "warning"
+                                ? "bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                                : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                            }`}
+                          >
+                            {student.attendanceRisk}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <span className="text-xs font-mono font-medium text-[#ECEEF0]">
+                          {student.assessmentTrend === "improving"
+                            ? "↑ Improving"
+                            : student.assessmentTrend === "declining"
+                            ? "↓ Declining"
+                            : "→ Stable"}
+                        </span>
+                      </td>
+
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`font-mono text-xs px-2 py-0.5 rounded-md ${
+                            student.overdueTasks > 0
+                              ? "bg-rose-500/15 text-rose-400 border border-rose-500/25 font-semibold"
+                              : "text-[#8A8F98] bg-white/[0.03]"
+                          }`}
+                        >
+                          {student.overdueTasks > 0
+                            ? `${student.overdueTasks} overdue`
+                            : "Clean"}
+                        </span>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-sm text-[#ECEEF0]">
+                        {student.mentor}
+                      </td>
+
+                      <td className="py-2.5 px-3 pr-5 text-right">
+                        <Link
+                          href={`/students/${student.id}`}
+                          className="h-7 px-2.5 text-xs font-medium rounded flex items-center text-[#FFFFFF] bg-white/[0.06] hover:bg-white/[0.12] border border-white/[0.08] transition-colors"
+                        >
                           View
-                        </Button>
-                        <Button size="sm" variant="primary" onClick={() => console.log("Plan", student.id)}>
-                          Plan
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-        </Card>
+        </div>
       </div>
     </WebLayout>
   );
