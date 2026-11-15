@@ -1,0 +1,4 @@
+# Database tooling for the BCREC Central database.
+# Install with: python -m pip install -r database/requirements.txt
+psycopg[binary]>=3.2,<4
+pytest>=8.3

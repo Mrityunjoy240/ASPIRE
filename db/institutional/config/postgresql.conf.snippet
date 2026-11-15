@@ -1,0 +1,18 @@
+# PostgreSQL server settings required by the approved design.
+# Source: docs/architecture/database-design-v1/POSTGRES_ARCHITECTURE.md
+#   section 3.2  pg_stat_statements is a required extension
+#   section 18   log_min_duration_statement = 500ms, log_lock_waits = on
+#
+# docker-compose.yml applies these through the postgres command line so a fresh
+# `docker compose up -d postgres` reproduces the environment. For a native
+# installation, add the same lines to postgresql.conf and restart the server.
+#
+# shared_preload_libraries must be set before CREATE EXTENSION pg_stat_statements
+# can succeed; it requires a server restart.
+
+shared_preload_libraries = 'pg_stat_statements'
+pg_stat_statements.max = 10000
+pg_stat_statements.track = all
+
+log_min_duration_statement = 500ms
+log_lock_waits = on

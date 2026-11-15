@@ -100,6 +100,11 @@ Step 5 — Review AI Recovery Plan
     "confidence_level": "HIGH"
   }
   Student sees a human-readable rendering of this plan WITH the evidence.
+  (DEC-01: the `evidence: [...]` above is the agent/LLM parse format —
+  string[], per CONSTITUTION A-05. Before persistence it is converted to the
+  canonical structured entries `{id, label, value, source, timestamp}`
+  documented in 05_DATA_API_CONTRACTS.md, which is what the student UI
+  renders — the label/value/source/timestamp panel of Step 3.)
 
 Step 6 — Student Decision
   Student must see three options. There is no silent default.

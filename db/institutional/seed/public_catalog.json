@@ -1,0 +1,148 @@
+{
+  "_note": "Public institutional catalogue data only. No person, contact, student, staff, attendance, assessment, or document record belongs in this file. Every value below is taken from docs/research/BCREC_MAKAUT_GOVERNANCE_AND_WORKFLOW_RESEARCH.md, which cites the AICTE 2026-27 Extension of Approval [S15] and the MAKAUT 2026-27 affiliation order [S14]. Values not present in that corpus are withheld, never guessed.",
+  "_sources": [
+    "docs/research/BCREC_MAKAUT_GOVERNANCE_AND_WORKFLOW_RESEARCH.md section 3.1 (legal identity)",
+    "docs/research/BCREC_MAKAUT_GOVERNANCE_AND_WORKFLOW_RESEARCH.md section 3.2 (academic portfolio and MAKAUT programme codes)"
+  ],
+  "institution": {
+    "college_code": "120",
+    "legal_name": "Dr. B. C. Roy Engineering College, Durgapur",
+    "short_name": "BCREC",
+    "affiliation_university": "MAKAUT, WB",
+    "autonomy_status": "autonomous",
+    "address_line1": "Jemua Road, Fuljhore",
+    "city": "Durgapur",
+    "district": "Paschim Bardhaman",
+    "state": "West Bengal",
+    "postal_code": "713206",
+    "country": "India",
+    "timezone": "Asia/Kolkata",
+    "currency": "INR",
+    "status": "active"
+  },
+  "departments": [
+    {
+      "code": "CE",
+      "name": "Civil Engineering"
+    },
+    {
+      "code": "CSE",
+      "name": "Computer Science and Engineering"
+    },
+    {
+      "code": "CSE (AIML)",
+      "name": "Computer Science and Engineering (AI and Machine Learning)"
+    },
+    {
+      "code": "CSE (CS)",
+      "name": "Computer Science and Engineering (Cyber Security)"
+    },
+    {
+      "code": "CSE (DS)",
+      "name": "Computer Science and Engineering (Data Science)"
+    },
+    {
+      "code": "ECE",
+      "name": "Electronics and Communication Engineering"
+    },
+    {
+      "code": "EE",
+      "name": "Electrical Engineering"
+    },
+    {
+      "code": "IT",
+      "name": "Information Technology"
+    },
+    {
+      "code": "ME",
+      "name": "Mechanical Engineering"
+    }
+  ],
+  "programmes": [
+    {
+      "programme_code": "013",
+      "bcrec_code": "013",
+      "name": "Civil Engineering",
+      "level": "UG",
+      "department_code": "CE",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "001",
+      "bcrec_code": "001",
+      "name": "Computer Science and Engineering",
+      "level": "UG",
+      "department_code": "CSE",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "308",
+      "bcrec_code": "308",
+      "name": "Computer Science and Engineering (AI and Machine Learning)",
+      "level": "UG",
+      "department_code": "CSE (AIML)",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "317",
+      "bcrec_code": "317",
+      "name": "Computer Science and Engineering (Cyber Security)",
+      "level": "UG",
+      "department_code": "CSE (CS)",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "305",
+      "bcrec_code": "305",
+      "name": "Computer Science and Engineering (Data Science)",
+      "level": "UG",
+      "department_code": "CSE (DS)",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "003",
+      "bcrec_code": "003",
+      "name": "Electronics and Communication Engineering",
+      "level": "UG",
+      "department_code": "ECE",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "016",
+      "bcrec_code": "016",
+      "name": "Electrical Engineering",
+      "level": "UG",
+      "department_code": "EE",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "002",
+      "bcrec_code": "002",
+      "name": "Information Technology",
+      "level": "UG",
+      "department_code": "IT",
+      "duration_years": 4
+    },
+    {
+      "programme_code": "007",
+      "bcrec_code": "007",
+      "name": "Mechanical Engineering",
+      "level": "UG",
+      "department_code": "ME",
+      "duration_years": 4
+    }
+  ],
+  "withheld": {
+    "_reason": "These eight PG programmes are verified by name and intake in the AICTE 2026-27 approval, but the research corpus records no MAKAUT programme code for them. academic.programme.bcrec_code is NOT NULL and unique, so seeding them would require inventing a code. They are withheld until the MAKAUT affiliation order is inspected for their codes.",
+    "programmes": [
+      { "name": "Computer Science and Engineering", "level": "PG", "intake": 18 },
+      { "name": "Electronics and Communication Engineering", "level": "PG", "intake": 18 },
+      { "name": "Power Systems", "level": "PG", "intake": 18 },
+      { "name": "Mechanical Engineering", "level": "PG", "intake": 18 },
+      { "name": "Master of Business Administration", "level": "PG", "intake": 90 },
+      { "name": "Master of Computer Applications", "level": "PG", "intake": 120 },
+      { "name": "MBA (Hospital Management)", "level": "PG", "intake": 60 },
+      { "name": "Construction Technology and Management", "level": "PG", "intake": 18 }
+    ]
+  }
+}

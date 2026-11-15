@@ -59,11 +59,15 @@ Observe → Understand → Detect → Plan → Assist → Verify → Replan → 
 ## Monorepo Structure
 
 ```
-apps/web/        ← Mentor, admin, faculty web workspace (Next.js 15)
-apps/mobile/     ← Student mobile app (Next.js 15 PWA)
-packages/
-  database/      ← db/migrations (SQL schema) + services/api/db (SQLAlchemy); seeds in db/seeds/
-  shared/        ← Engines, agents, LLMService, audit (shared TypeScript)
+apps/web/        ← Mother Application: Admin/Faculty/Mentor management workspace (Next.js 15)
+apps/mobile/     ← Student mobile web client (Next.js 15 PWA)
+app/             ← FastAPI Modular Monolith (Core Platform, Rule Engines, Agents, Repositories)
+db/
+  migrations/    ← ASPIRE Core Platform migrations (Cases, Interventions, LLM Audit, Scheduler)
+  institutional/ ← BCREC Central Multi-College Database (108 entities, 19 migrations: IAM, Academics, Attendance, Assessment, Exams)
+data/
+  knowledge/     ← Academic knowledge base chunks (syllabi, course curricula, rules)
+contracts/       ← Committed OpenAPI specification (openapi.json)
 docs/            ← All spec documents (source of truth)
 ```
 
@@ -114,6 +118,9 @@ uv run python scripts/generate_openapi.py   # writes contracts/openapi.json
 |---|---|---|
 | [`CONSTITUTION.md`](./docs/CONSTITUTION.md) | Non-negotiable engineering + product principles | 🟡 UNDER REVIEW |
 | [`AI_WORKING_STATE.md`](./docs/AI_WORKING_STATE.md) | Current phase, task, blockers — AI agent handoff | 🔄 LIVE |
+| [`ASPIRE_APPLICATION_BOUNDARIES.md`](./docs/ASPIRE_APPLICATION_BOUNDARIES.md) | Ecosystem structure, Mother App (Web), Core Platform, OpenCode vs Android Studio | 🟢 FROZEN |
+| [`ASPIRE_MOTHER_APPLICATION_SPECIFICATION.md`](./docs/ASPIRE_MOTHER_APPLICATION_SPECIFICATION.md) | Mother Application role workspaces, management capabilities & UX | 🟢 FROZEN |
+| [`DESIGN.md`](./DESIGN.md) | Linear-inspired UI/UX design system, semantic truth tokens, layout rules | 🟢 FROZEN |
 | [`ADR-001`](./docs/decisions/ADR-001_MOTHER_SYSTEM_ARCHITECTURE.md) | Mother System Architecture specification | 🟢 FROZEN |
 | [`01_PRD.md`](./docs/01_PRD.md) | What we build, who for, why, success criteria | 🟡 UNDER REVIEW |
 | [`02_USER_JOURNEYS.md`](./docs/02_USER_JOURNEYS.md) | Exact step-by-step flows for every user type | 🟡 UNDER REVIEW |

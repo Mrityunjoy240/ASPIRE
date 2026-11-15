@@ -63,6 +63,8 @@ supabase/.temp/
 
 # OpenCode local config (keep template, ignore personal)
 .opencode/config.json
+.opencode/node_modules/
+.qoder/
 
 # Large binary files — store in object storage, not git
 *.pdf
@@ -73,3 +75,8 @@ supabase/.temp/
 
 # Keep the master book only as explicit exception
 !EduGen_AI_ASPIRE_Master_Product_Engineering_Book_v1.0.docx
+
+# Build tooling
+.turbo/
+*.tsbuildinfo
+eslintcache
