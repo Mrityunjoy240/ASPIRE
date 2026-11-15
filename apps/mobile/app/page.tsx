@@ -84,6 +84,26 @@ export default function StudentHomePage() {
   return (
     <StudentLayout>
       <div className="space-y-6">
+        {/* Stitch Designs Banner */}
+        <div className="p-3.5 rounded-lg bg-gradient-to-r from-indigo-500/15 via-[#121316] to-[#0D0E10] border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-[#5E6AD2] shrink-0" />
+            <div>
+              <span className="text-xs font-semibold text-white">
+                Stitch UI Designs Generated (3 Variants Ready)
+              </span>
+              <p className="text-[11px] text-[#8A8F98]">
+                Compare Cozy Notion Desk, Academic Monolith, and Editorial Bento designs.
+              </p>
+            </div>
+          </div>
+          <Link href="/designs">
+            <Button size="sm" variant="primary" icon={<ArrowRight className="w-3 h-3" />}>
+              Compare 3 Stitch Designs
+            </Button>
+          </Link>
+        </div>
+
         {/* Welcome Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
