@@ -39,6 +39,11 @@ interface NoteItem {
   faculty: string;
   summary: string;
   keyTakeaways: string[];
+  flashcards?: {
+    front: string;
+    back: string;
+    hint?: string;
+  }[];
   examQuestions: {
     question: string;
     marks: number;
@@ -187,6 +192,33 @@ const SUBJECTS: SubjectDetail[] = [
               "BCNF condition: For X → Y, X MUST be a superkey. There is no prime attribute exception.",
               "Lossless-join decomposition is ALWAYS achievable in both 3NF and BCNF.",
               "Dependency-preservation is GUARANTEED in 3NF, but NOT always possible in BCNF.",
+            ],
+            flashcards: [
+              {
+                front: "What is the formal condition for a relation to be in 3NF?",
+                back: "For every non-trivial functional dependency X → Y, either X is a superkey OR Y is a prime attribute (part of a candidate key).",
+                hint: "Think about the prime attribute exception."
+              },
+              {
+                front: "Why is BCNF strictly stronger than 3NF?",
+                back: "BCNF eliminates the prime attribute loophole. For EVERY non-trivial FD X → Y, X MUST be a superkey without exception.",
+                hint: "No prime attribute exception in BCNF."
+              },
+              {
+                front: "Can BCNF always achieve both lossless join AND dependency preservation?",
+                back: "No. Lossless join is always possible in BCNF, but dependency preservation cannot always be guaranteed (unlike in 3NF).",
+                hint: "Compare with 3NF guarantee."
+              },
+              {
+                front: "What are the 3 database anomalies eliminated by 3NF and BCNF?",
+                back: "1. Insertion Anomaly (cannot insert without dummy data)\n2. Deletion Anomaly (deleting one fact accidentally deletes another)\n3. Update/Modification Anomaly (inconsistent redundant data across rows).",
+                hint: "I, D, U anomalies."
+              },
+              {
+                front: "What are Armstrong's 3 primary axioms for functional dependencies?",
+                back: "1. Reflexivity: If Y ⊆ X, then X → Y\n2. Augmentation: If X → Y, then XZ → YZ\n3. Transitivity: If X → Y and Y → Z, then X → Z.",
+                hint: "R, A, T."
+              }
             ],
             examQuestions: [
               {
@@ -548,8 +580,12 @@ const SUBJECTS: SubjectDetail[] = [
 export default function StudyCornerPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeNoteTab, setActiveNoteTab] = useState<"summary" | "exam" | "ai">("summary");
+  const [activeNoteTab, setActiveNoteTab] = useState<"summary" | "exam" | "flashcards" | "ai">("summary");
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+
+  // Flashcards state
+  const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
+  const [masteredCards, setMasteredCards] = useState<Record<number, boolean>>({});
 
   // AI Chat State inside note
   const [aiQuery, setAiQuery] = useState("");
@@ -992,6 +1028,16 @@ export default function StudyCornerPage() {
                           <Award className="w-3.5 h-3.5 text-amber-400" /> 5-Mark Exam Answers ({activeNote.examQuestions.length})
                         </button>
                         <button
+                          onClick={() => setActiveNoteTab("flashcards")}
+                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                            activeNoteTab === "flashcards"
+                              ? "bg-[#1C1D22] text-white border border-white/[0.12]"
+                              : "text-[#8A8F98] hover:text-white"
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5 text-[#b4a0e5]" /> Active Recall Flashcards ({activeNote.flashcards?.length || 0})
+                        </button>
+                        <button
                           onClick={() => setActiveNoteTab("ai")}
                           className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
                             activeNoteTab === "ai"
@@ -1073,7 +1119,124 @@ export default function StudyCornerPage() {
                         </div>
                       )}
 
-                      {/* TAB 3: AI DOUBT COMPANION */}
+                      {/* TAB 3: FLASHCARDS (ACTIVE RECALL) */}
+                      {activeNoteTab === "flashcards" && (
+                        <div className="space-y-4 pt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-[#8A8F98] uppercase tracking-wider block">
+                              Active Recall Deck ({activeNote.flashcards?.length || 0} Cards)
+                            </span>
+                            <span className="text-xs font-mono text-emerald-400 font-medium">
+                              {Object.values(masteredCards).filter(Boolean).length} / {activeNote.flashcards?.length || 0} Mastered
+                            </span>
+                          </div>
+
+                          {activeNote.flashcards && activeNote.flashcards.length > 0 ? (
+                            <div className="space-y-3">
+                              {activeNote.flashcards.map((card, cIdx) => {
+                                const isFlipped = !!flippedCards[cIdx];
+                                const isMastered = !!masteredCards[cIdx];
+
+                                return (
+                                  <div
+                                    key={cIdx}
+                                    className={`rounded-xl border transition-all p-4 relative cursor-pointer select-none ${
+                                      isFlipped
+                                        ? "bg-[#181A22] border-indigo-500/40 shadow-md"
+                                        : "bg-[#121316] border-white/[0.08] hover:border-white/[0.18]"
+                                    }`}
+                                    onClick={() =>
+                                      setFlippedCards((prev) => ({
+                                        ...prev,
+                                        [cIdx]: !prev[cIdx],
+                                      }))
+                                    }
+                                  >
+                                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.06] text-[10px] font-mono">
+                                      <span className="text-[#8A8F98] uppercase">
+                                        Card 0{cIdx + 1} · {isFlipped ? "Answer / Proof" : "Question / Prompt"}
+                                      </span>
+                                      <span className="text-[#5E6AD2] hover:underline flex items-center gap-1">
+                                        {isFlipped ? "Flip to Question ↺" : "Click to Reveal Answer ↷"}
+                                      </span>
+                                    </div>
+
+                                    {/* Card Content */}
+                                    {!isFlipped ? (
+                                      <div className="space-y-2 py-1">
+                                        <p className="text-xs font-semibold text-white leading-relaxed">
+                                          {card.front}
+                                        </p>
+                                        {card.hint && (
+                                          <p className="text-[10px] text-[#8A8F98] italic">
+                                            💡 Hint: {card.hint}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2 py-1">
+                                        <p className="text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line font-medium">
+                                          {card.back}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Action buttons on flip */}
+                                    {isFlipped && (
+                                      <div
+                                        className="pt-3 mt-3 border-t border-white/[0.06] flex items-center justify-between"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <span className="text-[11px] text-[#8A8F98]">How was your recall?</span>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            onClick={() =>
+                                              setMasteredCards((prev) => ({
+                                                ...prev,
+                                                [cIdx]: false,
+                                              }))
+                                            }
+                                            className="px-2.5 py-1 text-[11px] rounded bg-white/[0.06] hover:bg-white/[0.1] text-[#ECEEF0] transition-colors"
+                                          >
+                                            Review Again
+                                          </button>
+                                          <button
+                                            onClick={() =>
+                                              setMasteredCards((prev) => ({
+                                                ...prev,
+                                                [cIdx]: true,
+                                              }))
+                                            }
+                                            className={`px-2.5 py-1 text-[11px] rounded font-medium transition-colors ${
+                                              isMastered
+                                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                                : "bg-[#5E6AD2] text-white hover:bg-[#5E6AD2]/90"
+                                            }`}
+                                          >
+                                            {isMastered ? "Mastered ✓" : "Got It Right ✓"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="p-8 text-center bg-[#121316] rounded-xl border border-white/[0.06] space-y-2">
+                              <Layers className="w-8 h-8 text-[#8A8F98] mx-auto" />
+                              <p className="text-xs font-semibold text-white">
+                                Flashcards are being compiled for this module
+                              </p>
+                              <p className="text-[11px] text-[#8A8F98]">
+                                Try opening Unit 3 (Normalization Slides) for an active recall deck.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* TAB 4: AI DOUBT COMPANION */}
                       {activeNoteTab === "ai" && (
                         <div className="space-y-3 pt-2">
                           {/* Preset Doubts */}

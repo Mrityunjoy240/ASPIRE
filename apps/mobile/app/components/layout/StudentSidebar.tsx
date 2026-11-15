@@ -38,17 +38,40 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
+    title: "Study Corner",
+    emoji: "🧠",
+    items: [
+      {
+        href: "/study",
+        label: "Study Vault",
+        badge: "AI",
+        badgeVariant: "indigo",
+        icon: Sparkles,
+      },
+      {
+        href: "/study/notes",
+        label: "Lecture Notes",
+        icon: FileText,
+      },
+      {
+        href: "/study/quizzes",
+        label: "Practice Quizzes",
+        icon: ClipboardList,
+      },
+    ],
+  },
+  {
     title: "Academics",
     emoji: "📚",
     items: [
       {
         href: "/",
-        label: "My Dashboard",
+        label: "My Study Desk",
         icon: LayoutDashboard,
       },
       {
         href: "/attendance",
-        label: "Attendance",
+        label: "Attendance Ledger",
         badge: "73.3%",
         badgeVariant: "rose",
         icon: CalendarCheck,
@@ -64,29 +87,6 @@ const navSections: NavSection[] = [
         badge: "Active",
         badgeVariant: "amber",
         icon: Milestone,
-      },
-    ],
-  },
-  {
-    title: "Study Corner",
-    emoji: "🧠",
-    items: [
-      {
-        href: "/study",
-        label: "AI Study Studio",
-        badge: "AI",
-        badgeVariant: "indigo",
-        icon: Sparkles,
-      },
-      {
-        href: "/study/notes",
-        label: "Lecture Notes",
-        icon: FileText,
-      },
-      {
-        href: "/study/quizzes",
-        label: "Practice Quizzes",
-        icon: ClipboardList,
       },
     ],
   },
