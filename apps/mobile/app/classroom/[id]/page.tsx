@@ -26,7 +26,7 @@ import {
   Send,
   Download,
 } from "lucide-react";
-import { CLASSROOM_COURSES } from "../page";
+import { CLASSROOM_COURSES } from "../classroom-data";
 
 interface Announcement {
   id: string;
@@ -502,3 +502,4 @@ export default function SubjectClassroomPage() {
     </StudentLayout>
   );
 }
+
