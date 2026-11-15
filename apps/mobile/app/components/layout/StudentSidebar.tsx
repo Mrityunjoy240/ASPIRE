@@ -6,10 +6,13 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   CalendarCheck,
-  Sparkles,
-  Milestone,
   BookOpen,
+  Sparkles,
+  FileText,
+  ClipboardList,
+  Milestone,
   GraduationCap,
+  Briefcase,
   ChevronLeft,
   Flame,
 } from "lucide-react";
@@ -19,66 +22,89 @@ interface StudentSidebarProps {
   onToggle: () => void;
 }
 
+interface NavItem {
+  href: string;
+  label: string;
+  badge?: string;
+  badgeVariant?: "rose" | "indigo" | "amber" | "emerald";
+  icon: React.ComponentType<{ className?: string }>;
+}
+
 interface NavSection {
-  title?: string;
-  items: {
-    href: string;
-    label: string;
-    badge?: string;
-    badgeVariant?: "rose" | "indigo" | "amber";
-    icon: React.ComponentType<{ className?: string }>;
-  }[];
+  title: string;
+  emoji: string;
+  items: NavItem[];
 }
 
 const navSections: NavSection[] = [
   {
-    title: "Daily Workspace",
+    title: "Academics",
+    emoji: "📚",
     items: [
       {
         href: "/",
-        label: "Command Center",
+        label: "My Dashboard",
         icon: LayoutDashboard,
       },
       {
         href: "/attendance",
-        label: "Attendance Ledger",
+        label: "Attendance",
         badge: "73.3%",
         badgeVariant: "rose",
         icon: CalendarCheck,
       },
-    ],
-  },
-  {
-    title: "AI Learning Studio",
-    items: [
-      {
-        href: "/study",
-        label: "AI Study Corner",
-        badge: "NotebookLM",
-        badgeVariant: "indigo",
-        icon: Sparkles,
-      },
       {
         href: "/courses",
-        label: "Courses & Notes",
+        label: "Courses & Marks",
         icon: BookOpen,
       },
-    ],
-  },
-  {
-    title: "Success & Recovery",
-    items: [
       {
         href: "/plan",
-        label: "My Recovery Plan",
+        label: "Recovery Plan",
         badge: "Active",
         badgeVariant: "amber",
         icon: Milestone,
       },
+    ],
+  },
+  {
+    title: "Study Corner",
+    emoji: "🧠",
+    items: [
+      {
+        href: "/study",
+        label: "AI Study Studio",
+        badge: "AI",
+        badgeVariant: "indigo",
+        icon: Sparkles,
+      },
+      {
+        href: "/study/notes",
+        label: "Lecture Notes",
+        icon: FileText,
+      },
+      {
+        href: "/study/quizzes",
+        label: "Practice Quizzes",
+        icon: ClipboardList,
+      },
+    ],
+  },
+  {
+    title: "Career",
+    emoji: "🚀",
+    items: [
       {
         href: "/career",
-        label: "Degree & Grades",
+        label: "CGPA & Degree Audit",
         icon: GraduationCap,
+      },
+      {
+        href: "/career/placements",
+        label: "Placement Readiness",
+        badge: "New",
+        badgeVariant: "emerald",
+        icon: Briefcase,
       },
     ],
   },
@@ -139,11 +165,17 @@ export function StudentSidebar({ collapsed, onToggle }: StudentSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5" role="navigation">
         {navSections.map((section, idx) => (
           <div key={idx} className="space-y-1">
-            {!collapsed && section.title && (
-              <div className="px-2.5 pb-1 text-xs font-semibold tracking-wider text-[#8A8F98] uppercase">
-                {section.title}
+            {/* Section Header */}
+            {!collapsed && (
+              <div className="px-2.5 pb-1.5 flex items-center gap-1.5">
+                <span className="text-[11px]">{section.emoji}</span>
+                <span className="text-[11px] font-semibold tracking-wider text-[#8A8F98] uppercase">
+                  {section.title}
+                </span>
               </div>
             )}
+
+            {/* Nav Items */}
             {section.items.map((item) => {
               const isActive =
                 item.href === "/"
@@ -184,7 +216,9 @@ export function StudentSidebar({ collapsed, onToggle }: StudentSidebarProps) {
                                 ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
                                 : item.badgeVariant === "indigo"
                                 ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
-                                : "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                : item.badgeVariant === "amber"
+                                ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                                : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                             }
                           `}
                         >
