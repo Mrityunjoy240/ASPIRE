@@ -15,6 +15,7 @@ import {
   Briefcase,
   ChevronLeft,
   Flame,
+  School,
 } from "lucide-react";
 
 interface StudentSidebarProps {
@@ -42,8 +43,15 @@ const navSections: NavSection[] = [
     emoji: "🧠",
     items: [
       {
+        href: "/classroom",
+        label: "Subject Rooms",
+        badge: "Classroom",
+        badgeVariant: "emerald",
+        icon: School,
+      },
+      {
         href: "/study",
-        label: "Study Vault",
+        label: "NotebookLM Studio",
         badge: "AI",
         badgeVariant: "indigo",
         icon: Sparkles,

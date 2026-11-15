@@ -1,1334 +1,1050 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { StudentLayout } from "@/components/layout/StudentLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   BookOpen,
-  FileText,
   Sparkles,
+  Send,
+  Upload,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  Layers,
+  ArrowRight,
+  RefreshCw,
+  Play,
+  Pause,
+  Download,
+  Award,
+  Clock,
+  HelpCircle,
   ChevronLeft,
   ChevronRight,
-  Download,
-  CheckCircle2,
-  Clock,
-  Search,
-  Layers,
-  Send,
-  FileCheck,
-  Award,
-  Flame,
-  ArrowRight,
-  HelpCircle,
   ExternalLink,
+  Plus,
+  Trash2,
+  Paperclip,
+  Volume2,
+  FileCheck,
+  Table,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // ==========================================
 // DATA STRUCTURES
 // ==========================================
 
-interface NoteItem {
+interface SourceDoc {
   id: string;
   title: string;
-  type: "slides" | "handout" | "cheatsheet" | "pyq" | "assignment";
+  type: "faculty_slides" | "pyq" | "handout" | "student_notes";
   pages: number;
   uploadedDate: string;
   faculty: string;
-  summary: string;
-  keyTakeaways: string[];
-  flashcards?: {
-    front: string;
-    back: string;
-    hint?: string;
-  }[];
-  examQuestions: {
-    question: string;
-    marks: number;
-    answer: string;
-  }[];
+  selected: boolean;
+  contentSnippet: string;
 }
 
-interface UnitModule {
-  unitNumber: number;
-  title: string;
-  status: "completed" | "in-progress" | "upcoming";
-  weightage: string;
-  notes: NoteItem[];
-}
-
-interface SubjectDetail {
+interface VisualChatMessage {
   id: string;
-  code: string;
-  name: string;
-  faculty: string;
-  totalUnits: number;
-  completedUnits: number;
-  totalNotes: number;
-  examDate: string;
-  examCountdownDays: number;
-  criticalNotice?: string;
-  accentColor: string;
-  topics: string[];
-  units: UnitModule[];
+  sender: "user" | "ai";
+  text: string;
+  timestamp: string;
+  citations?: { title: string; page: number; snippet: string }[];
+  // Intelligent UI extensions:
+  visualType?: "schema_split" | "step_by_step" | "er_diagram" | "formula_card";
+  schemaData?: {
+    originalTable: { name: string; cols: string[]; fds: string[] };
+    decomposedTables: { name: string; cols: string[]; primaryKey: string; isBCNF: boolean }[];
+    lostDependency?: string;
+  };
+  stepperData?: {
+    steps: { stepNumber: number; title: string; description: string; math: string }[];
+    activeStep: number;
+  };
+  formulaData?: {
+    formulaTitle: string;
+    expression: string;
+    proofLines: string[];
+    examMarking: string;
+  };
+}
+
+interface Flashcard {
+  id: number;
+  question: string;
+  answer: string;
+  hint?: string;
 }
 
 // ==========================================
-// COURSE CATALOG & ACADEMIC REPOSITORY
+// PRESET MOCK DATA
 // ==========================================
 
-const SUBJECTS: SubjectDetail[] = [
+const INITIAL_SOURCES: SourceDoc[] = [
   {
-    id: "cs501",
-    code: "CS501",
-    name: "Database Management Systems",
+    id: "src-1",
+    title: "Unit 3: Normalization & Relational Design Slides",
+    type: "faculty_slides",
+    pages: 64,
+    uploadedDate: "05 Nov 2026",
     faculty: "Prof. Raj Kumar Samanta",
-    totalUnits: 5,
-    completedUnits: 2,
-    totalNotes: 14,
-    examDate: "23 Nov 2026",
-    examCountdownDays: 8,
-    criticalNotice: "ESE Final Exam in 8 days · Unit 3 & 4 carry 35 marks in Group B & C",
-    accentColor: "border-indigo-500/40 text-indigo-400 bg-indigo-500/10",
-    topics: ["ER & Relational Model", "SQL & Integrity", "3NF/BCNF Normalization", "2PL Concurrency", "B+ Trees"],
-    units: [
-      {
-        unitNumber: 1,
-        title: "ER Modeling, Schemas & Relational Algebra",
-        status: "completed",
-        weightage: "12 Marks",
-        notes: [
-          {
-            id: "n-1-1",
-            title: "Lecture 01-04: ER Diagrams to Relational Tables",
-            type: "slides",
-            pages: 28,
-            uploadedDate: "14 Oct 2026",
-            faculty: "Prof. Samanta",
-            summary: "Comprehensive mapping rules from Entity-Relationship concepts to 1st normal form relational tables. Covers strong/weak entities, multi-valued attributes, composite attributes, and cardinality ratios.",
-            keyTakeaways: [
-              "Weak entity sets always require the primary key of their identifying strong entity set plus their partial key (discriminator).",
-              "Multi-valued attributes MUST be split into a separate relation containing the entity primary key and the attribute value.",
-              "1:N relationships store the primary key of the '1' side into the 'N' side table as a foreign key.",
-            ],
-            examQuestions: [
-              {
-                question: "Explain the algorithm to convert an ER diagram with weak entities and ternary relationships into tables.",
-                marks: 5,
-                answer: "1. Strong Entities: Create a table with all atomic attributes, primary key unchanged.\n2. Weak Entities: Create table with discriminator + primary key of owner entity as composite primary key.\n3. Ternary Relationship: Create table with primary keys of all three participating entities as composite key, plus any descriptive attributes.",
-              },
-            ],
-          },
-          {
-            id: "n-1-2",
-            title: "Relational Algebra Operations & Query Trees",
-            type: "cheatsheet",
-            pages: 6,
-            uploadedDate: "20 Oct 2026",
-            faculty: "Prof. Samanta",
-            summary: "Formal relational operators: Selection (σ), Projection (π), Cartesian Product (×), Natural Join (⋈), Division (÷), and Set operations.",
-            keyTakeaways: [
-              "Selection σ is commutative: σ_p1(σ_p2(R)) = σ_p2(σ_p1(R)).",
-              "Projection π is NOT commutative.",
-              "Natural join R ⋈ S equates attributes with identical names and eliminates duplicates.",
-            ],
-            examQuestions: [
-              {
-                question: "Express the Division (÷) operator using fundamental relational algebra operators.",
-                marks: 5,
-                answer: "R ÷ S = π_(R-S)(R) - π_(R-S)((π_(R-S)(R) × S) - R). It returns tuples in R(A, B) that are associated with ALL tuples in S(B).",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        unitNumber: 2,
-        title: "SQL, Nested Queries, Views & Constraints",
-        status: "completed",
-        weightage: "15 Marks",
-        notes: [
-          {
-            id: "n-2-1",
-            title: "Advanced SQL: Correlated Subqueries & GROUP BY HAVING",
-            type: "handout",
-            pages: 22,
-            uploadedDate: "27 Oct 2026",
-            faculty: "Prof. Samanta",
-            summary: "Deep dive into SQL aggregation, subqueries evaluated row-by-row (correlated), and difference between WHERE and HAVING filters.",
-            keyTakeaways: [
-              "WHERE filters individual rows before grouping; HAVING filters aggregated groups.",
-              "Correlated subqueries refer to attributes from the outer query and execute once per candidate row.",
-              "Integrity constraints include NOT NULL, UNIQUE, PRIMARY KEY, FOREIGN KEY (ON DELETE CASCADE), and CHECK.",
-            ],
-            examQuestions: [
-              {
-                question: "Write an SQL query to find the 2nd highest salary from an Employee table without using LIMIT/TOP.",
-                marks: 5,
-                answer: "SELECT MAX(salary) FROM Employee WHERE salary < (SELECT MAX(salary) FROM Employee); OR: SELECT salary FROM Employee E1 WHERE 1 = (SELECT COUNT(DISTINCT salary) FROM Employee E2 WHERE E2.salary > E1.salary);",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        unitNumber: 3,
-        title: "Relational Database Design & Normalization",
-        status: "in-progress",
-        weightage: "20 Marks",
-        notes: [
-          {
-            id: "n-3-1",
-            title: "Unit 3 Official Slides: Normal Forms & Functional Dependencies",
-            type: "slides",
-            pages: 64,
-            uploadedDate: "05 Nov 2026",
-            faculty: "Prof. Samanta",
-            summary: "Armstrong's axioms, closure of functional dependencies (F+), canonical cover, and formal conditions for 1NF, 2NF, 3NF, and BCNF.",
-            keyTakeaways: [
-              "3NF condition: For X → Y, either X is a superkey OR Y is a prime attribute.",
-              "BCNF condition: For X → Y, X MUST be a superkey. There is no prime attribute exception.",
-              "Lossless-join decomposition is ALWAYS achievable in both 3NF and BCNF.",
-              "Dependency-preservation is GUARANTEED in 3NF, but NOT always possible in BCNF.",
-            ],
-            flashcards: [
-              {
-                front: "What is the formal condition for a relation to be in 3NF?",
-                back: "For every non-trivial functional dependency X → Y, either X is a superkey OR Y is a prime attribute (part of a candidate key).",
-                hint: "Think about the prime attribute exception."
-              },
-              {
-                front: "Why is BCNF strictly stronger than 3NF?",
-                back: "BCNF eliminates the prime attribute loophole. For EVERY non-trivial FD X → Y, X MUST be a superkey without exception.",
-                hint: "No prime attribute exception in BCNF."
-              },
-              {
-                front: "Can BCNF always achieve both lossless join AND dependency preservation?",
-                back: "No. Lossless join is always possible in BCNF, but dependency preservation cannot always be guaranteed (unlike in 3NF).",
-                hint: "Compare with 3NF guarantee."
-              },
-              {
-                front: "What are the 3 database anomalies eliminated by 3NF and BCNF?",
-                back: "1. Insertion Anomaly (cannot insert without dummy data)\n2. Deletion Anomaly (deleting one fact accidentally deletes another)\n3. Update/Modification Anomaly (inconsistent redundant data across rows).",
-                hint: "I, D, U anomalies."
-              },
-              {
-                front: "What are Armstrong's 3 primary axioms for functional dependencies?",
-                back: "1. Reflexivity: If Y ⊆ X, then X → Y\n2. Augmentation: If X → Y, then XZ → YZ\n3. Transitivity: If X → Y and Y → Z, then X → Z.",
-                hint: "R, A, T."
-              }
-            ],
-            examQuestions: [
-              {
-                question: "Differentiate between 3NF and BCNF with a concrete example where 3NF holds but BCNF is violated.",
-                marks: 5,
-                answer: "3NF allows X → Y if Y is a prime attribute even when X is not superkey. BCNF strictly forbids this.\n\nExample: R(Student, Course, Instructor). A student has one instructor per course, but instructors teach only one course.\nFDs: (Student, Course) → Instructor, Instructor → Course.\nCandidate keys: (Student, Course) and (Student, Instructor).\nIn Instructor → Course: Course is prime attribute, so it is in 3NF! But Instructor is NOT superkey, so it VIOLATES BCNF.",
-              },
-              {
-                question: "Explain the algorithm to compute the Canonical Cover Fc of a set of functional dependencies.",
-                marks: 5,
-                answer: "1. Right-side decomposition: Split X → Y1Y2 into X → Y1 and X → Y2.\n2. Left-side extraneous attribute removal: If attribute A in X is extraneous (i.e. (X - {A})+ with respect to F contains Y), replace X → Y with (X - {A}) → Y.\n3. Redundant dependency removal: If F - {X → Y} logically implies X → Y, delete it.",
-              },
-            ],
-          },
-          {
-            id: "n-3-2",
-            title: "Exam 1-Pager: 3NF vs BCNF Comparison & Formula Cheat Sheet",
-            type: "cheatsheet",
-            pages: 4,
-            uploadedDate: "09 Nov 2026",
-            faculty: "Prof. Samanta",
-            summary: "High-yield summary card specifically formatted for BCREC autonomous semester papers. Quick tests for candidate keys and decomposition.",
-            keyTakeaways: [
-              "Quick test for lossless join: R1 ∩ R2 must determine (R1 - R2) or (R2 - R1).",
-              "Number of candidate keys calculation using attribute closure.",
-              "Anomalies eliminated: Insertion, Deletion, and Modification.",
-            ],
-            examQuestions: [
-              {
-                question: "State and prove the condition for lossless-join decomposition of relation R into R1 and R2.",
-                marks: 5,
-                answer: "Theorem: Decomposition is lossless if and only if (R1 ∩ R2) → R1 or (R1 ∩ R2) → R2 in F+.\nProof outline: Let common attributes be C = R1 ∩ R2. If C → R1, then C is a superkey of R1. By Chase algorithm, any row matching on C can be uniquely reconstructed.",
-              },
-            ],
-          },
-          {
-            id: "n-3-3",
-            title: "BCREC Past 3 Years Solved Normalization PYQs (2023-2025)",
-            type: "pyq",
-            pages: 14,
-            uploadedDate: "11 Nov 2026",
-            faculty: "CSE Academic Cell",
-            summary: "Past year university exam questions on finding candidate keys, decomposing relations, and testing normal forms.",
-            keyTakeaways: [
-              "Question 3(a) in 2023, 2024, and 2025 was a 5-mark decomposition problem.",
-              "Always write: Step 1: Attribute closure, Step 2: Candidate keys, Step 3: Test each FD, Step 4: Decompose.",
-            ],
-            examQuestions: [
-              {
-                question: "Given R(A, B, C, D, E) with F = {A → BC, CD → E, B → D, E → A}. Find all candidate keys and the highest normal form.",
-                marks: 5,
-                answer: "1. (A)+ = {A, B, C, D, E} → A is a candidate key.\n2. Since E → A, (E)+ contains all attributes → E is candidate key.\n3. Since CD → E, (CD)+ = {C, D, E, A, B} → CD is candidate key.\n4. Since B → D, (BC)+ = {B, C, D, E, A} → BC is candidate key.\nCandidate keys: {A, E, CD, BC}.\nIn B → D: B is not superkey, D is not prime (prime = {A, E, C, D, B} -> wait, D is prime!). All attributes are prime, so R is in 3NF. But B is not superkey, so not in BCNF.",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        unitNumber: 4,
-        title: "Transaction Processing, ACID & Concurrency Control (2PL)",
-        status: "upcoming",
-        weightage: "18 Marks",
-        notes: [
-          {
-            id: "n-4-1",
-            title: "Transaction States, ACID Properties & Serializability",
-            type: "slides",
-            pages: 36,
-            uploadedDate: "12 Nov 2026",
-            faculty: "Prof. Samanta",
-            summary: "Atomicity, Consistency, Isolation, Durability. Conflict vs View Serializability, Precedence Graph (Serialization Graph) cycle detection.",
-            keyTakeaways: [
-              "Conflict Serializability: If the precedence graph has NO cycles, the schedule is conflict serializable.",
-              "Strict 2PL prevents cascading rollbacks and guarantees conflict serializability.",
-              "Deadlock handling: Wait-Die vs Wound-Wait timestamp strategies.",
-            ],
-            examQuestions: [
-              {
-                question: "Explain Two-Phase Locking (2PL) protocol. How does Strict 2PL differ from Basic 2PL?",
-                marks: 5,
-                answer: "Basic 2PL has two phases: Growing phase (locks acquired, no locks released) and Shrinking phase (locks released, no locks acquired).\nStrict 2PL: All exclusive (X) locks held by transaction are retained until Commit or Abort. This guarantees freedom from cascading aborts.",
-              },
-            ],
-          },
-        ],
-      },
-      {
-        unitNumber: 5,
-        title: "Physical Storage, File Organization & B+ Tree Indexing",
-        status: "upcoming",
-        weightage: "12 Marks",
-        notes: [
-          {
-            id: "n-5-1",
-            title: "Indexing Structures: Dense vs Sparse, B-Tree vs B+ Tree",
-            type: "slides",
-            pages: 32,
-            uploadedDate: "13 Nov 2026",
-            faculty: "Prof. Samanta",
-            summary: "Single-level and multi-level indexing, Clustered vs Non-clustered, B+ Tree search, insertion with node splits, and deletion with merges.",
-            keyTakeaways: [
-              "B+ Trees store actual data pointers ONLY at leaf nodes, leaving internal nodes purely for routing keys.",
-              "Leaf nodes in a B+ Tree are linked sequentially via pointers, making range queries O(log N + k).",
-              "Height of B+ Tree of order p with N records is ceil(log_(p/2)(N)).",
-            ],
-            examQuestions: [
-              {
-                question: "Why are B+ Trees preferred over B-Trees for database disk storage?",
-                marks: 5,
-                answer: "1. Higher Fanout: Since internal nodes do not store data pointers, more keys fit per disk page, reducing tree height.\n2. Faster Range Searches: Leaf nodes form a linked list, so range scans do not require tree traversal.\n3. Predictable Search Time: All leaf nodes are at identical depth.",
-              },
-            ],
-          },
-        ],
-      },
-    ],
+    selected: true,
+    contentSnippet: "Boyce-Codd Normal Form requires every determinant to be a superkey. Unlike 3NF, BCNF does not allow exceptions for prime attributes.",
   },
   {
-    id: "cs502",
-    code: "CS502",
-    name: "Operating Systems",
-    faculty: "Dr. Anirban Bose",
-    totalUnits: 4,
-    completedUnits: 2,
-    totalNotes: 11,
-    examDate: "28 Nov 2026",
-    examCountdownDays: 13,
-    accentColor: "border-violet-500/40 text-violet-400 bg-violet-500/10",
-    topics: ["System Calls & Structures", "CPU Scheduling (FCFS/RR/SJF)", "Process Synchronization & Semaphores", "Memory Paging & Virtual Memory"],
-    units: [
-      {
-        unitNumber: 1,
-        title: "OS Architecture, Dual-Mode & System Calls",
-        status: "completed",
-        weightage: "10 Marks",
-        notes: [
-          {
-            id: "n-os-1",
-            title: "Dual Mode Operation, Kernel vs User Mode & Syscalls",
-            type: "slides",
-            pages: 24,
-            uploadedDate: "10 Oct 2026",
-            faculty: "Dr. Bose",
-            summary: "Hardware protection, privilege levels (Ring 0 vs Ring 3), trap handling, interrupt vectors, and fork(), exec(), wait() calls in Unix.",
-            keyTakeaways: ["Mode bit transitions from 1 (user) to 0 (kernel) on software interrupt (trap).", "fork() returns 0 in child process and child PID in parent process."],
-            examQuestions: [{ question: "Explain the dual-mode operation in modern OS with hardware support.", marks: 5, answer: "Dual mode separates User Mode (mode bit 1) and Kernel Mode (mode bit 0). Privileged instructions can only execute in kernel mode." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 2,
-        title: "Process Scheduling & Threads",
-        status: "completed",
-        weightage: "18 Marks",
-        notes: [
-          {
-            id: "n-os-2",
-            title: "CPU Scheduling Algorithms: FCFS, SJF, Round Robin & Priority",
-            type: "cheatsheet",
-            pages: 8,
-            uploadedDate: "24 Oct 2026",
-            faculty: "Dr. Bose",
-            summary: "Formulas and Gantt chart calculations for Turnaround Time (TAT) and Waiting Time (WT). Convoy effect in FCFS and starvation in priority scheduling.",
-            keyTakeaways: ["Turnaround Time = Completion Time - Arrival Time.", "Waiting Time = Turnaround Time - Burst Time.", "SJF gives minimum average waiting time for given set of processes."],
-            examQuestions: [{ question: "Compare Preemptive SJF (SRTF) and Round Robin scheduling.", marks: 5, answer: "SRTF prioritizes shortest remaining burst, minimizing average waiting time but risking starvation for long jobs. RR gives time slice quantum to all processes, preventing starvation." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 3,
-        title: "Process Synchronization & Classical Deadlocks",
-        status: "in-progress",
-        weightage: "20 Marks",
-        notes: [
-          {
-            id: "n-os-3",
-            title: "Critical Section Problem, Semaphores & Dining Philosophers",
-            type: "slides",
-            pages: 38,
-            uploadedDate: "06 Nov 2026",
-            faculty: "Dr. Bose",
-            summary: "Peterson's solution, counting vs binary semaphores, wait()/signal() atomic primitives, and Banker's algorithm for deadlock avoidance.",
-            keyTakeaways: ["Three requirements: Mutual Exclusion, Progress, and Bounded Waiting.", "Deadlock necessary conditions: Mutual Exclusion, Hold & Wait, No Preemption, Circular Wait."],
-            examQuestions: [{ question: "State Peterson's algorithm for 2-process synchronization and prove mutual exclusion.", marks: 5, answer: "Peterson uses flag[2] array and turn variable. Process i sets flag[i]=true, turn=j, and loops while flag[j] and turn==j." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 4,
-        title: "Memory Management & Paging",
-        status: "upcoming",
-        weightage: "15 Marks",
-        notes: [
-          {
-            id: "n-os-4",
-            title: "Virtual Memory, Paging, TLB & Page Replacement Algorithms",
-            type: "slides",
-            pages: 34,
-            uploadedDate: "11 Nov 2026",
-            faculty: "Dr. Bose",
-            summary: "Logical to physical address translation, Page tables, Translation Lookaside Buffer (TLB), FIFO, LRU, and Optimal replacement.",
-            keyTakeaways: ["Effective Memory Access Time (EMAT) = Hit_ratio * (TLB + Mem) + (1 - Hit_ratio) * (TLB + 2*Mem).", "Belady's anomaly occurs in FIFO page replacement."],
-            examQuestions: [{ question: "Calculate EMAT given TLB hit ratio 90%, TLB access 20ns, memory access 100ns.", marks: 5, answer: "EMAT = 0.90*(20 + 100) + 0.10*(20 + 2*100) = 0.90*120 + 0.10*220 = 108 + 22 = 130 ns." }],
-          },
-        ],
-      },
-    ],
+    id: "src-2",
+    title: "BCREC Autonomous Solved PYQs (2023–2025)",
+    type: "pyq",
+    pages: 18,
+    uploadedDate: "11 Nov 2026",
+    faculty: "CSE Exam Cell",
+    selected: true,
+    contentSnippet: "Group B Q3(a): Given relation R(A,B,C,D,E) with F={A->BC, CD->E, B->D, E->A}. Decompose into BCNF. 5 Marks.",
   },
   {
-    id: "cs503",
-    code: "CS503",
-    name: "Computer Networks",
-    faculty: "Prof. Suman Dasgupta",
-    totalUnits: 3,
-    completedUnits: 2,
-    totalNotes: 8,
-    examDate: "03 Dec 2026",
-    examCountdownDays: 18,
-    accentColor: "border-sky-500/40 text-sky-400 bg-sky-500/10",
-    topics: ["OSI vs TCP/IP Layers", "Sliding Window Protocols (Go-Back-N / SR)", "IPv4 Subnetting & CIDR", "Routing (Dijkstra / Bellman-Ford)"],
-    units: [
-      {
-        unitNumber: 1,
-        title: "Layered Architecture & Physical/Data Link Transmission",
-        status: "completed",
-        weightage: "15 Marks",
-        notes: [
-          {
-            id: "n-cn-1",
-            title: "OSI 7 Layers vs TCP/IP Model Functions",
-            type: "handout",
-            pages: 18,
-            uploadedDate: "08 Oct 2026",
-            faculty: "Prof. Dasgupta",
-            summary: "Roles of Physical, Data Link, Network, Transport, Session, Presentation, Application layers. Encapsulation and PDU names.",
-            keyTakeaways: ["Transport layer PDU = Segment, Network = Packet, Data Link = Frame, Physical = Bit.", "TCP provides reliable, byte-stream connection; UDP is connectionless datagram."],
-            examQuestions: [{ question: "Differentiate between OSI and TCP/IP reference models.", marks: 5, answer: "OSI has 7 layers and clearly distinguishes services, interfaces, and protocols. TCP/IP has 4 layers, was built around actual protocols, and combines presentation/session into application." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 2,
-        title: "Sliding Window Protocols & Flow Control",
-        status: "completed",
-        weightage: "18 Marks",
-        notes: [
-          {
-            id: "n-cn-2",
-            title: "Stop-and-Wait, Go-Back-N & Selective Repeat Protocol Analysis",
-            type: "cheatsheet",
-            pages: 10,
-            uploadedDate: "25 Oct 2026",
-            faculty: "Prof. Dasgupta",
-            summary: "Formulas for efficiency (η = N / (1 + 2a)), window sizes (GBN: Ws = 2^k - 1, Wr = 1; SR: Ws = Wr = 2^(k-1)), and sequence number bits.",
-            keyTakeaways: ["a = T_prop / T_trans.", "In GBN, receiver window is always 1, out-of-order packets discarded.", "In SR, receiver window equals sender window, out-of-order packets buffered."],
-            examQuestions: [{ question: "If bandwidth is 1 Gbps, 1-way delay is 10ms, packet size 1000 bytes, find minimum window size for 100% efficiency.", marks: 5, answer: "T_trans = (1000 * 8) / 10^9 = 8 microseconds. T_prop = 10ms = 10,000 microseconds. a = 10000 / 8 = 1250. Min window N = 1 + 2a = 1 + 2500 = 2501 packets." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 3,
-        title: "Network Layer: IPv4, Subnetting & Routing Protocols",
-        status: "in-progress",
-        weightage: "20 Marks",
-        notes: [
-          {
-            id: "n-cn-3",
-            title: "CIDR, Subnet Masking Calculations & Distance Vector Routing",
-            type: "slides",
-            pages: 30,
-            uploadedDate: "08 Nov 2026",
-            faculty: "Prof. Dasgupta",
-            summary: "IP address classes, CIDR prefix notation (/24, /27), subnet address, broadcast address, Count-to-Infinity problem, and Link State vs Distance Vector.",
-            keyTakeaways: ["Number of hosts per subnet = 2^(32 - prefix) - 2.", "Dijkstra algorithm computes shortest path using global link states (OSPF)."],
-            examQuestions: [{ question: "A network has IP block 200.10.20.0/24. Subnet it into 4 equal subnets. State subnet masks and host ranges.", marks: 5, answer: "Need 4 subnets -> borrow 2 bits -> prefix becomes /26 (mask 255.255.255.192). Each subnet has 64 IPs (62 usable hosts): 1) .0 to .63, 2) .64 to .127, 3) .128 to .191, 4) .192 to .255." }],
-          },
-        ],
-      },
-    ],
+    id: "src-3",
+    title: "Unit 4: Transaction Processing & 2PL Handout",
+    type: "handout",
+    pages: 28,
+    uploadedDate: "09 Nov 2026",
+    faculty: "Prof. Raj Kumar Samanta",
+    selected: true,
+    contentSnippet: "Strict 2PL prevents cascading aborts by holding exclusive locks until the end of the transaction.",
   },
   {
-    id: "cs504",
-    code: "CS504",
-    name: "Artificial Intelligence & Machine Learning",
-    faculty: "Dr. Gour Sundar Mitra Thakur",
-    totalUnits: 3,
-    completedUnits: 1,
-    totalNotes: 9,
-    examDate: "07 Dec 2026",
-    examCountdownDays: 22,
-    accentColor: "border-amber-500/40 text-amber-400 bg-amber-500/10",
-    topics: ["Uninformed & Informed Search (A*)", "Game Playing (Minimax & Alpha-Beta)", "Knowledge Representation & First Order Logic", "Supervised Learning & Decision Trees"],
-    units: [
-      {
-        unitNumber: 1,
-        title: "Search Algorithms & Heuristics",
-        status: "completed",
-        weightage: "18 Marks",
-        notes: [
-          {
-            id: "n-ai-1",
-            title: "A* Search, Admissibility, Consistency & 8-Puzzle",
-            type: "slides",
-            pages: 26,
-            uploadedDate: "15 Oct 2026",
-            faculty: "Dr. Mitra Thakur",
-            summary: "f(n) = g(n) + h(n). Admissible heuristics never overestimate the cost to reach the goal. Proof of A* optimality.",
-            keyTakeaways: ["A* is optimal and complete if h(n) is admissible (tree search) or consistent (graph search).", "Manhattan distance dominates misplaced tiles for 8-puzzle."],
-            examQuestions: [{ question: "Prove that A* search using tree search is optimal if heuristic h(n) is admissible.", marks: 5, answer: "Suppose sub-optimal goal G2 is chosen before optimal goal G1. Since h(G2)=0, f(G2)=g(G2)>g(G1). Since h is admissible, for some node n on optimal path to G1, f(n) <= g(G1) < f(G2). Thus n is expanded before G2." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 2,
-        title: "Adversarial Search & Logic Representation",
-        status: "in-progress",
-        weightage: "18 Marks",
-        notes: [
-          {
-            id: "n-ai-2",
-            title: "Minimax Algorithm & Alpha-Beta Pruning Rules",
-            type: "cheatsheet",
-            pages: 12,
-            uploadedDate: "02 Nov 2026",
-            faculty: "Dr. Mitra Thakur",
-            summary: "Zero-sum two-player games. Alpha (highest value choice for MAX) and Beta (lowest value choice for MIN). Pruning condition: α >= β.",
-            keyTakeaways: ["Alpha-Beta pruning yields identical decisions to Minimax, with best case time complexity O(b^(d/2)).", "Move ordering drastically impacts the number of pruned branches."],
-            examQuestions: [{ question: "Trace Alpha-Beta pruning on a game tree of depth 3 with branching factor 2.", marks: 5, answer: "Initialize α = -∞, β = +∞ at root. Evaluate left child to update α. At right child, if value <= α, prune remaining subtree." }],
-          },
-        ],
-      },
-      {
-        unitNumber: 3,
-        title: "Machine Learning Foundations",
-        status: "upcoming",
-        weightage: "15 Marks",
-        notes: [
-          {
-            id: "n-ai-3",
-            title: "Decision Trees (ID3), Entropy & Information Gain",
-            type: "slides",
-            pages: 24,
-            uploadedDate: "10 Nov 2026",
-            faculty: "Dr. Mitra Thakur",
-            summary: "Shannon entropy formula: H(S) = -∑ p_i log2(p_i). Information Gain = Entropy(Parent) - Weighted Average Entropy(Children).",
-            keyTakeaways: ["ID3 selects attribute with highest Information Gain at each node split.", "Overfitting countered by post-pruning."],
-            examQuestions: [{ question: "Calculate Entropy for a target variable with 9 positive and 5 negative examples.", marks: 5, answer: "p+ = 9/14, p- = 5/14. H(S) = -(9/14)*log2(9/14) - (5/14)*log2(5/14) = 0.940 bits." }],
-          },
-        ],
-      },
-    ],
+    id: "src-4",
+    title: "My Handwritten Lecture Notes (Nov 12).pdf",
+    type: "student_notes",
+    pages: 6,
+    uploadedDate: "12 Nov 2026",
+    faculty: "Ananya Roy (Self)",
+    selected: false,
+    contentSnippet: "Shortcut to compute canonical covers: always expand right side first before eliminating redundant attributes.",
   },
 ];
 
-// ==========================================
-// MAIN COMPONENT
-// ==========================================
+const PRESET_FLASHCARDS: Flashcard[] = [
+  {
+    id: 1,
+    question: "What is the formal definition of 3NF?",
+    answer: "For every non-trivial FD X → Y, either X is a superkey OR Y is a prime attribute.",
+    hint: "Think about the prime attribute loophole.",
+  },
+  {
+    id: 2,
+    question: "Why is BCNF strictly stronger than 3NF?",
+    answer: "BCNF strictly requires X to be a superkey for every non-trivial dependency X → Y. No exceptions for prime attributes.",
+    hint: "No prime attribute allowance.",
+  },
+  {
+    id: 3,
+    question: "Can BCNF always preserve all functional dependencies?",
+    answer: "No! Lossless join is guaranteed in both 3NF and BCNF, but dependency preservation is only guaranteed in 3NF.",
+    hint: "Compare with 3NF guarantee.",
+  },
+  {
+    id: 4,
+    question: "What does Strict Two-Phase Locking (Strict 2PL) prevent?",
+    answer: "Strict 2PL holds exclusive locks until commit/abort, completely preventing cascading rollbacks.",
+    hint: "Prevents dirty reads.",
+  },
+];
 
-export default function StudyCornerPage() {
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeNoteTab, setActiveNoteTab] = useState<"summary" | "exam" | "flashcards" | "ai">("summary");
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+export default function NotebookLMStudyRoomPage() {
+  const searchParams = useSearchParams();
+  const subjectParam = searchParams.get("subject") || "cs501";
 
-  // Flashcards state
+  // Sources State (Left Column)
+  const [sources, setSources] = useState<SourceDoc[]>(INITIAL_SOURCES);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [newSourceTitle, setNewSourceTitle] = useState("");
+
+  // Citation Drawer Modal
+  const [activeCitation, setActiveCitation] = useState<{ title: string; page: number; snippet: string } | null>(null);
+
+  // Chat Canvas State (Middle Column)
+  const [messages, setMessages] = useState<VisualChatMessage[]>([
+    {
+      id: "msg-welcome",
+      sender: "ai",
+      text: "Welcome to your NotebookLM Study Studio for CS501 Database Management Systems. I am grounded on your 3 selected professor slides and exam papers.\n\nAsk me any doubt or try one of the interactive visual breakdowns below:",
+      timestamp: "10:00 AM",
+      citations: [{ title: "Unit 3 Slides", page: 42, snippet: "Boyce-Codd Normal Form: for every X -> Y, X must be a superkey." }],
+    },
+  ]);
+  const [inputPrompt, setInputPrompt] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+
+  // Studio Tools State (Right Column)
+  const [studioTool, setStudioTool] = useState<"audio" | "flashcards" | "cheat_sheet" | "quiz">("audio");
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(35); // 35% elapsed
+
+  // Audio playback ticker
+  useEffect(() => {
+    if (!audioPlaying) return;
+    const interval = setInterval(() => {
+      setAudioProgress((prev) => (prev >= 100 ? 0 : prev + 1));
+    }, 400);
+    return () => clearInterval(interval);
+  }, [audioPlaying]);
+
+  // Flashcards flip state
   const [flippedCards, setFlippedCards] = useState<Record<number, boolean>>({});
   const [masteredCards, setMasteredCards] = useState<Record<number, boolean>>({});
 
-  // AI Chat State inside note
-  const [aiQuery, setAiQuery] = useState("");
-  const [aiAnswers, setAiAnswers] = useState<{ query: string; reply: string }[]>([]);
-  const [isAiLoading, setIsAiLoading] = useState(false);
+  // Stepper active step state for interactive stepper in chat
+  const [stepperStep, setStepperStep] = useState(1);
 
-  // Active Subject details
-  const currentSubject = SUBJECTS.find((s) => s.id === selectedSubjectId);
+  const selectedCount = sources.filter((s) => s.selected).length;
 
-  // Flattened notes for current subject
-  const currentSubjectNotes: { note: NoteItem; unitNumber: number; unitTitle: string }[] =
-    currentSubject
-      ? currentSubject.units.flatMap((u) =>
-          u.notes.map((n) => ({ note: n, unitNumber: u.unitNumber, unitTitle: u.title }))
-        )
-      : [];
-
-  // Active selected note
-  const activeNote =
-    currentSubjectNotes.find((item) => item.note.id === selectedNoteId)?.note ||
-    currentSubjectNotes[0]?.note;
-
-  // Filter subjects for the main directory
-  const filteredSubjects = SUBJECTS.filter(
-    (s) =>
-      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.topics.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const handleOpenSubject = (subjectId: string) => {
-    setSelectedSubjectId(subjectId);
-    const sub = SUBJECTS.find((s) => s.id === subjectId);
-    if (sub && sub.units[0]?.notes[0]) {
-      setSelectedNoteId(sub.units[0].notes[0].id);
-    }
-    setActiveNoteTab("summary");
+  const toggleSource = (id: string) => {
+    setSources((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, selected: !s.selected } : s))
+    );
   };
 
-  const handleSendAiDoubt = (presetText?: string) => {
-    const text = presetText || aiQuery;
+  const handleAddSource = () => {
+    if (!newSourceTitle.trim()) return;
+    const newDoc: SourceDoc = {
+      id: `src-${Date.now()}`,
+      title: newSourceTitle.trim(),
+      type: "student_notes",
+      pages: 8,
+      uploadedDate: "Just now",
+      faculty: "Ananya Roy (Self)",
+      selected: true,
+      contentSnippet: "Custom student uploaded notes and revision formulas.",
+    };
+    setSources((prev) => [newDoc, ...prev]);
+    setNewSourceTitle("");
+    setShowUploadModal(false);
+  };
+
+  const handleSendPrompt = (presetText?: string, visualType?: "schema_split" | "step_by_step" | "formula_card") => {
+    const text = presetText || inputPrompt;
     if (!text.trim()) return;
 
-    setIsAiLoading(true);
-    setAiQuery("");
+    const userMsg: VisualChatMessage = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: text,
+      timestamp: "Now",
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInputPrompt("");
+    setIsTyping(true);
 
     setTimeout(() => {
-      let reply = `Here is the concise explanation from the course repository:\n\n• In ${currentSubject?.code} (${activeNote?.title}), this concept directly relates to MAKAUT exam standards.\n• Key Exam Tip: Always draw the formal diagram or truth table first to secure full marks.\n• Reference: ${activeNote?.summary}`;
+      let aiMsg: VisualChatMessage;
 
-      if (text.toLowerCase().includes("analogy") || text.toLowerCase().includes("eli5")) {
-        reply = `💡 Real-World Analogy:\nThink of this like a busy airport luggage carousel: if every passenger grabbed bags without looking at baggage tags, you'd get chaos (concurrency anomalies). The protocol ensures everyone checks out their tagged bag in an orderly queue.`;
-      } else if (text.toLowerCase().includes("5 mark") || text.toLowerCase().includes("exam")) {
-        reply = `🎯 To score full 5/5 on this in the BCREC End-Sem:\n1. State the exact formal definition (1 Mark)\n2. Write the 2 necessary mathematical conditions (2 Marks)\n3. Give one counter-example demonstrating the violation (2 Marks)`;
+      if (visualType === "schema_split" || text.toLowerCase().includes("bcnf") || text.toLowerCase().includes("split")) {
+        aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: "ai",
+          text: "Here is the visual schema decomposition demonstrating why BCNF eliminates anomalies but can cause dependency loss on university exams:",
+          timestamp: "Now",
+          citations: [{ title: "Unit 3 Slides", page: 44, snippet: "Decomposition into BCNF: R(Student, Course, Instructor) where Inst -> Course." }],
+          visualType: "schema_split",
+          schemaData: {
+            originalTable: {
+              name: "Enrollment (Student, Course, Instructor)",
+              cols: ["Student_ID (PK)", "Course_ID (PK)", "Instructor_Name"],
+              fds: ["(Student, Course) → Instructor", "Instructor → Course"],
+            },
+            decomposedTables: [
+              {
+                name: "R1: Instructor_Course",
+                cols: ["Instructor_Name (PK)", "Course_ID"],
+                primaryKey: "Instructor_Name",
+                isBCNF: true,
+              },
+              {
+                name: "R2: Student_Instructor",
+                cols: ["Student_ID (PK)", "Instructor_Name (PK)"],
+                primaryKey: "(Student_ID, Instructor_Name)",
+                isBCNF: true,
+              },
+            ],
+            lostDependency: "(Student, Course) → Instructor is LOST across decomposed tables!",
+          },
+        };
+      } else if (visualType === "step_by_step" || text.toLowerCase().includes("canonical") || text.toLowerCase().includes("step")) {
+        aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: "ai",
+          text: "Here is the interactive step-by-step algorithm for computing the Minimal Canonical Cover Fc:",
+          timestamp: "Now",
+          citations: [{ title: "BCREC PYQs 2024", page: 3, snippet: "Find Canonical Cover for F = {A -> BC, B -> C, A -> B}." }],
+          visualType: "step_by_step",
+          stepperData: {
+            activeStep: 1,
+            steps: [
+              {
+                stepNumber: 1,
+                title: "Right-Hand Side Singleton Splitting",
+                description: "Decompose compound right attributes so every FD has exactly one attribute on the right.",
+                math: "A → BC decomposes into A → B and A → C.",
+              },
+              {
+                stepNumber: 2,
+                title: "Extraneous Left-Hand Attribute Elimination",
+                description: "If an attribute on the left can be derived from the remaining attributes, delete it as extraneous.",
+                math: "In AB → C, if (A)+ with respect to F contains C, then B is extraneous -> replace with A → C.",
+              },
+              {
+                stepNumber: 3,
+                title: "Redundant Dependency Removal",
+                description: "For each FD X → Y, test if (X)+ with respect to (F - {X → Y}) still contains Y. If so, remove X → Y.",
+                math: "Final Minimal Cover: Fc = {A → B, B → C}.",
+              },
+            ],
+          },
+        };
+      } else if (text.toLowerCase().includes("2pl") || text.toLowerCase().includes("concurrency")) {
+        aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: "ai",
+          text: "In BCREC Group C (10 Marks), Strict Two-Phase Locking (Strict 2PL) is evaluated on two rules:\n\n1. Growing Phase: Locks acquired, none released.\n2. Shrinking Phase: All EXCLUSIVE locks must be held until COMMIT/ABORT.",
+          timestamp: "Now",
+          citations: [{ title: "Unit 4 Handout", page: 12, snippet: "Strict 2PL avoids cascading aborts and guarantees conflict serializability." }],
+          visualType: "formula_card",
+          formulaData: {
+            formulaTitle: "Strict 2PL Serializability Theorem",
+            expression: "Precedence Graph G(V, E) is strictly acyclic ⇒ Conflict Serializable & Cascade-Free",
+            proofLines: [
+              "Lock Point: The exact instant transaction acquires its final lock.",
+              "Transactions serialize in the exact order of their Lock Points.",
+              "Because exclusive locks are held until Commit, dirty reads are impossible.",
+            ],
+            examMarking: "10 Marks (3 Marks Definition, 4 Marks Proof, 3 Marks Timing Diagram)",
+          },
+        };
+      } else {
+        aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: "ai",
+          text: `Grounded response based on ${selectedCount} selected sources:\n\n• For your question "${text}": In CS501 Database Management Systems, this corresponds to BCREC syllabus Unit 3 & 4.\n• Always begin your answer by defining the candidate key closure $(X)^+$.\n• This question has appeared in 2 of the last 3 years of autonomous semester papers.`,
+          timestamp: "Now",
+          citations: [{ title: "Unit 3 Slides", page: 42, snippet: "Relational database constraints and normalization algorithms." }],
+        };
       }
 
-      setAiAnswers((prev) => [...prev, { query: text, reply }]);
-      setIsAiLoading(false);
-    }, 450);
+      setMessages((prev) => [...prev, aiMsg]);
+      setIsTyping(false);
+    }, 500);
   };
 
   return (
     <StudentLayout>
-      <div className="space-y-6">
-        {/* ======================================================== */}
-        {/* VIEW 1: SUBJECT DIRECTORY (When no subject is opened)    */}
-        {/* ======================================================== */}
-        {!selectedSubjectId && (
-          <div className="space-y-6">
-            {/* Header Banner */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <h1 className="text-xl font-bold text-white tracking-tight">Study Corner</h1>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 font-medium">
-                    Semester 5 Repository
-                  </span>
-                </div>
-                <p className="text-xs text-[#8A8F98] mt-1">
-                  BCREC Computer Science & Engineering · All enrolled courses, unit-by-unit lecture notes, formula sheets & PYQs
-                </p>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative w-full md:w-72">
-                <Search className="w-3.5 h-3.5 text-[#8A8F98] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search subjects, topics, or notes..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#121316] border border-white/[0.08] rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-[#6E7480] outline-none focus:border-[#5E6AD2] transition-colors"
-                />
-              </div>
-            </div>
-
-            {/* Critical Exam Notice Strip */}
-            <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
-                <span className="text-xs font-semibold text-rose-300">
-                  Upcoming Exam: CS501 Database Management Systems starts in 8 Days (23 Nov 2026)
-                </span>
-              </div>
-              <button
-                onClick={() => handleOpenSubject("cs501")}
-                className="text-xs text-rose-300 hover:text-white font-medium flex items-center gap-1 shrink-0 underline underline-offset-2"
-              >
-                Open CS501 Notes & PYQs <ArrowRight className="w-3 h-3" />
+      <div className="space-y-4">
+        {/* Top Studio Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
+          <div className="flex items-center gap-3">
+            <Link href="/classroom/cs501">
+              <button className="p-1.5 rounded-lg border border-white/[0.08] bg-[#121316] text-[#8A8F98] hover:text-white hover:border-white/[0.2] transition-colors flex items-center gap-1 text-xs">
+                <ChevronLeft className="w-4 h-4" /> Exit to Classroom
               </button>
-            </div>
-
-            {/* Enrolled Subjects Grid */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[#8A8F98] flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-[#5E6AD2]" /> Enrolled Courses · Click a course to open notes
+            </Link>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold">
+                  CS501 DBMS
                 </span>
-                <span className="text-xs font-mono text-[#8A8F98]">4 Total Subjects</span>
+                <h1 className="text-base font-bold text-white tracking-tight">
+                  NotebookLM AI Study Studio
+                </h1>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+                  Grounded on {selectedCount} Sources
+                </span>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredSubjects.map((sub) => {
-                  const progressPct = Math.round((sub.completedUnits / sub.totalUnits) * 100);
-
-                  return (
-                    <Card
-                      key={sub.id}
-                      onClick={() => handleOpenSubject(sub.id)}
-                      className="p-5 cursor-pointer bg-[#0D0E10] border-white/[0.08] hover:border-white/[0.20] hover:bg-[#121316] transition-all group relative overflow-hidden flex flex-col justify-between"
-                    >
-                      <div className="space-y-3">
-                        {/* Top row: Code + Exam Countdown */}
-                        <div className="flex items-center justify-between">
-                          <span
-                            className={`text-[11px] font-mono px-2 py-0.5 rounded border font-semibold ${sub.accentColor}`}
-                          >
-                            {sub.code}
-                          </span>
-                          <span className="text-[11px] font-mono text-[#8A8F98] flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-amber-400" />
-                            Exam in {sub.examCountdownDays}d ({sub.examDate})
-                          </span>
-                        </div>
-
-                        {/* Subject Title & Faculty */}
-                        <div>
-                          <h2 className="text-base font-bold text-white group-hover:text-[#5E6AD2] transition-colors">
-                            {sub.name}
-                          </h2>
-                          <p className="text-xs text-[#8A8F98] mt-0.5">Faculty Lead: {sub.faculty}</p>
-                        </div>
-
-                        {/* Key Topics Tags */}
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {sub.topics.map((topic, tIdx) => (
-                            <span
-                              key={tIdx}
-                              className="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.06] text-[#9DA3AE]"
-                            >
-                              {topic}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Bottom Footer: Stats + Progress */}
-                      <div className="pt-4 mt-4 border-t border-white/[0.06] space-y-2">
-                        <div className="flex items-center justify-between text-xs text-[#8A8F98]">
-                          <span>
-                            {sub.totalUnits} Units · <span className="text-white font-medium">{sub.totalNotes} Note Files</span>
-                          </span>
-                          <span className="font-mono text-white font-medium">{progressPct}% Covered</span>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="w-full h-1 bg-white/[0.08] rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-[#5E6AD2] rounded-full transition-all"
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1">
-                          <span className="text-[11px] text-[#8A8F98]">
-                            Unit {sub.completedUnits + 1} In Progress
-                          </span>
-                          <span className="text-xs font-semibold text-[#5E6AD2] group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                            Open Notes Vault <ChevronRight className="w-3 h-3" />
-                          </span>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Quick Study Tools Showcase */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
-                  <FileText className="w-4 h-4 text-[#5E6AD2]" /> 1-Page Cheat Sheets
-                </div>
-                <p className="text-[11px] text-[#8A8F98] leading-relaxed">
-                  High-yield formulas and comparison tables designed to review right before walking into the examination hall.
-                </p>
-              </Card>
-
-              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
-                  <Award className="w-4 h-4 text-amber-400" /> BCREC Solved PYQs
-                </div>
-                <p className="text-[11px] text-[#8A8F98] leading-relaxed">
-                  Past 3 years autonomous question papers with model answers broken down by 5-mark and 10-mark structures.
-                </p>
-              </Card>
-
-              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-2">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-white">
-                  <Sparkles className="w-4 h-4 text-indigo-400" /> Grounded AI Tutor
-                </div>
-                <p className="text-[11px] text-[#8A8F98] leading-relaxed">
-                  Ask doubts directly on your professor's slides with zero hallucinations. Everything cites exact syllabus pages.
-                </p>
-              </Card>
+              <p className="text-[11px] text-[#8A8F98]">
+                B.C. Roy Engineering College · Grounded on verified syllabus, slides & PYQs
+              </p>
             </div>
           </div>
-        )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-rose-300 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded font-medium">
+              ESE Exam in 8 Days
+            </span>
+          </div>
+        </div>
 
         {/* ======================================================== */}
-        {/* VIEW 2: SUBJECT NOTES VAULT (When a subject is selected) */}
+        {/* 3-COLUMN DESKTOP NOTEBOOKLM WORKSPACE                    */}
         {/* ======================================================== */}
-        {currentSubject && (
-          <div className="space-y-5">
-            {/* Top Navigation & Breadcrumbs */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSelectedSubjectId(null)}
-                  className="p-1.5 rounded-lg border border-white/[0.08] bg-[#121316] text-[#8A8F98] hover:text-white hover:border-white/[0.2] transition-colors flex items-center gap-1 text-xs"
-                >
-                  <ChevronLeft className="w-4 h-4" /> All Subjects
-                </button>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          {/* ====================================================== */}
+          {/* LEFT COLUMN: SOURCES & NOTES PANEL (3 Cols)            */}
+          {/* ====================================================== */}
+          <div className="lg:col-span-3 space-y-3">
+            <Card className="p-3.5 bg-[#0D0E10] border-white/[0.08] space-y-3">
+              <div className="flex items-center justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${currentSubject.accentColor}`}
-                    >
-                      {currentSubject.code}
-                    </span>
-                    <h1 className="text-base font-bold text-white">{currentSubject.name}</h1>
-                  </div>
-                  <p className="text-xs text-[#8A8F98] mt-0.5">
-                    Faculty: {currentSubject.faculty} · ESE Exam on {currentSubject.examDate} (
-                    <span className="text-amber-400 font-semibold">{currentSubject.examCountdownDays} Days</span>)
-                  </p>
+                  <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-[#5E6AD2]" /> Sources
+                  </span>
+                  <p className="text-[10px] text-[#8A8F98]">{selectedCount} of {sources.length} active in grounding</p>
                 </div>
+
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setShowUploadModal(true)}
+                  icon={<Plus className="w-3 h-3" />}
+                >
+                  Add
+                </Button>
               </div>
 
-              {/* Subject Switcher pills */}
-              <div className="flex items-center gap-1.5 bg-[#121316] p-1 rounded-lg border border-white/[0.08]">
-                {SUBJECTS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleOpenSubject(s.id)}
-                    className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
-                      s.id === currentSubject.id
-                        ? "bg-[#1C1D22] text-white border border-white/[0.12]"
-                        : "text-[#8A8F98] hover:text-white"
+              {/* Source Checklist */}
+              <div className="space-y-2">
+                {sources.map((src) => (
+                  <div
+                    key={src.id}
+                    onClick={() => toggleSource(src.id)}
+                    className={`p-2.5 rounded-lg border cursor-pointer transition-all flex items-start gap-2.5 ${
+                      src.selected
+                        ? "bg-[#14151C] border-[#5E6AD2]/50 shadow-sm"
+                        : "bg-[#101114] border-white/[0.04] opacity-60 hover:opacity-100"
                     }`}
                   >
-                    {s.code}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    <input
+                      type="checkbox"
+                      checked={src.selected}
+                      onChange={() => toggleSource(src.id)}
+                      className="mt-0.5 rounded border-white/[0.2] accent-[#5E6AD2] cursor-pointer"
+                    />
 
-            {/* 2-Column Deep Note Workspace */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column: Units & Notes Index (5 Cols) */}
-              <div className="lg:col-span-5 space-y-4">
-                <div className="flex items-center justify-between text-xs text-[#8A8F98]">
-                  <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5 text-[#5E6AD2]" /> Syllabus Units & Notes
-                  </span>
-                  <span>{currentSubject.totalNotes} Files Available</span>
-                </div>
-
-                <div className="space-y-3">
-                  {currentSubject.units.map((unit) => (
-                    <div
-                      key={unit.unitNumber}
-                      className="rounded-lg bg-[#0D0E10] border border-white/[0.08] overflow-hidden"
-                    >
-                      {/* Unit Header */}
-                      <div className="p-3 bg-[#121316] border-b border-white/[0.06] flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-mono font-bold text-[#5E6AD2]">
-                            U{unit.unitNumber}
-                          </span>
-                          <span className="text-xs font-semibold text-white truncate">
-                            {unit.title}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] font-mono text-[#8A8F98]">
-                            {unit.weightage}
-                          </span>
-                          {unit.status === "completed" && (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          )}
-                          {unit.status === "in-progress" && (
-                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Notes List under Unit */}
-                      <div className="divide-y divide-white/[0.04]">
-                        {unit.notes.map((note) => {
-                          const isSelected = activeNote?.id === note.id;
-
-                          return (
-                            <div
-                              key={note.id}
-                              onClick={() => {
-                                setSelectedNoteId(note.id);
-                                setActiveNoteTab("summary");
-                              }}
-                              className={`p-3 cursor-pointer transition-all flex items-start justify-between gap-3 ${
-                                isSelected
-                                  ? "bg-[#1C1D22] border-l-2 border-[#5E6AD2]"
-                                  : "hover:bg-white/[0.02]"
-                              }`}
-                            >
-                              <div className="flex items-start gap-2.5 min-w-0">
-                                <FileText
-                                  className={`w-4 h-4 mt-0.5 shrink-0 ${
-                                    isSelected ? "text-[#5E6AD2]" : "text-[#8A8F98]"
-                                  }`}
-                                />
-                                <div className="min-w-0">
-                                  <p
-                                    className={`text-xs font-medium truncate ${
-                                      isSelected ? "text-white" : "text-[#ECEEF0]"
-                                    }`}
-                                  >
-                                    {note.title}
-                                  </p>
-                                  <div className="flex items-center gap-2 text-[10px] text-[#8A8F98] mt-0.5">
-                                    <span
-                                      className={`px-1.5 py-0.2 rounded font-mono uppercase font-semibold ${
-                                        note.type === "slides"
-                                          ? "bg-indigo-500/15 text-indigo-300"
-                                          : note.type === "cheatsheet"
-                                          ? "bg-amber-500/15 text-amber-300"
-                                          : note.type === "pyq"
-                                          ? "bg-emerald-500/15 text-emerald-300"
-                                          : "bg-white/[0.06] text-[#9DA3AE]"
-                                      }`}
-                                    >
-                                      {note.type}
-                                    </span>
-                                    <span>{note.pages} Pages</span>
-                                    <span>· {note.uploadedDate}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <ChevronRight
-                                className={`w-3.5 h-3.5 shrink-0 mt-1 transition-transform ${
-                                  isSelected ? "text-[#5E6AD2] translate-x-0.5" : "text-[#6E7480]"
-                                }`}
-                              />
-                            </div>
-                          );
-                        })}
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-xs font-medium truncate ${src.selected ? "text-white" : "text-[#8A8F98]"}`}>
+                        {src.title}
+                      </p>
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#8A8F98] mt-0.5">
+                        <span
+                          className={`font-mono uppercase px-1 rounded text-[9px] ${
+                            src.type === "faculty_slides"
+                              ? "bg-indigo-500/15 text-indigo-300"
+                              : src.type === "pyq"
+                              ? "bg-amber-500/15 text-amber-300"
+                              : "bg-white/[0.06] text-[#ECEEF0]"
+                          }`}
+                        >
+                          {src.type.replace("_", " ")}
+                        </span>
+                        <span>{src.pages} pgs</span>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
 
-              {/* Right Column: Note Reader & Study Workspace (7 Cols) */}
-              <div className="lg:col-span-7 space-y-4">
-                {activeNote ? (
-                  <Card className="p-5 bg-[#0D0E10] border-white/[0.08] space-y-4 min-h-[560px] flex flex-col justify-between">
-                    <div>
-                      {/* Active Note Header */}
-                      <div className="pb-3 border-b border-white/[0.06] flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold uppercase ${
-                                activeNote.type === "slides"
-                                  ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
-                                  : activeNote.type === "cheatsheet"
-                                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                                  : "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                              }`}
-                            >
-                              {activeNote.type}
-                            </span>
-                            <span className="text-xs text-[#8A8F98] font-mono">
-                              {activeNote.pages} Pages · By {activeNote.faculty}
-                            </span>
-                          </div>
-                          <h2 className="text-base font-bold text-white mt-1.5 leading-snug">
-                            {activeNote.title}
-                          </h2>
-                        </div>
+              {/* Upload Extra Notes Action */}
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="w-full py-2 border border-dashed border-white/[0.14] hover:border-[#5E6AD2] rounded-lg text-center text-xs text-[#8A8F98] hover:text-white transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Upload className="w-3.5 h-3.5 text-[#5E6AD2]" /> Upload Extra Student Notes
+              </button>
+            </Card>
 
-                        {/* Top action buttons */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button size="sm" variant="secondary" icon={<Download className="w-3 h-3" />}>
-                            Save PDF
-                          </Button>
+            {/* Quick High-Yield Query Chips */}
+            <Card className="p-3.5 bg-[#0D0E10] border-white/[0.08] space-y-2">
+              <span className="text-[10px] font-bold text-[#8A8F98] uppercase tracking-wider block">
+                Visual Query Shortcuts:
+              </span>
+              <div className="space-y-1.5">
+                <button
+                  onClick={() => handleSendPrompt("Visualize 3NF vs BCNF schema split", "schema_split")}
+                  className="w-full text-left p-2 rounded bg-[#121316] hover:bg-[#1C1D22] text-xs text-[#ECEEF0] border border-white/[0.04] transition-colors flex items-center justify-between"
+                >
+                  <span className="truncate">🎨 Schema Split (3NF vs BCNF)</span>
+                  <ArrowRight className="w-3 h-3 text-[#5E6AD2] shrink-0" />
+                </button>
+                <button
+                  onClick={() => handleSendPrompt("Step-by-step Canonical Cover algorithm", "step_by_step")}
+                  className="w-full text-left p-2 rounded bg-[#121316] hover:bg-[#1C1D22] text-xs text-[#ECEEF0] border border-white/[0.04] transition-colors flex items-center justify-between"
+                >
+                  <span className="truncate">🪜 Step-by-Step Canonical Cover</span>
+                  <ArrowRight className="w-3 h-3 text-[#5E6AD2] shrink-0" />
+                </button>
+                <button
+                  onClick={() => handleSendPrompt("Explain Strict 2PL Concurrency proof", "formula_card")}
+                  className="w-full text-left p-2 rounded bg-[#121316] hover:bg-[#1C1D22] text-xs text-[#ECEEF0] border border-white/[0.04] transition-colors flex items-center justify-between"
+                >
+                  <span className="truncate">📐 Strict 2PL 10-Mark Proof</span>
+                  <ArrowRight className="w-3 h-3 text-[#5E6AD2] shrink-0" />
+                </button>
+              </div>
+            </Card>
+          </div>
+
+          {/* ====================================================== */}
+          {/* MIDDLE COLUMN: INTELLIGENT VISUAL CHAT CANVAS (5 Cols) */}
+          {/* ====================================================== */}
+          <div className="lg:col-span-5 space-y-3">
+            <Card className="p-4 bg-[#0D0E10] border-white/[0.08] min-h-[600px] flex flex-col justify-between">
+              {/* Messages Feed */}
+              <div className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
+                {messages.map((msg) => (
+                  <div key={msg.id} className="space-y-2">
+                    {/* User Message */}
+                    {msg.sender === "user" ? (
+                      <div className="flex justify-end">
+                        <div className="bg-[#1C1D22] text-white text-xs px-3.5 py-2.5 rounded-xl max-w-[85%] border border-white/[0.1] font-medium">
+                          {msg.text}
                         </div>
                       </div>
-
-                      {/* Workspace Tabs */}
-                      <div className="flex items-center gap-1.5 pt-3 pb-2">
-                        <button
-                          onClick={() => setActiveNoteTab("summary")}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeNoteTab === "summary"
-                              ? "bg-[#1C1D22] text-white border border-white/[0.12]"
-                              : "text-[#8A8F98] hover:text-white"
-                          }`}
-                        >
-                          <BookOpen className="w-3.5 h-3.5 text-[#5E6AD2]" /> Core Takeaways
-                        </button>
-                        <button
-                          onClick={() => setActiveNoteTab("exam")}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeNoteTab === "exam"
-                              ? "bg-[#1C1D22] text-white border border-white/[0.12]"
-                              : "text-[#8A8F98] hover:text-white"
-                          }`}
-                        >
-                          <Award className="w-3.5 h-3.5 text-amber-400" /> 5-Mark Exam Answers ({activeNote.examQuestions.length})
-                        </button>
-                        <button
-                          onClick={() => setActiveNoteTab("flashcards")}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeNoteTab === "flashcards"
-                              ? "bg-[#1C1D22] text-white border border-white/[0.12]"
-                              : "text-[#8A8F98] hover:text-white"
-                          }`}
-                        >
-                          <Layers className="w-3.5 h-3.5 text-[#b4a0e5]" /> Active Recall Flashcards ({activeNote.flashcards?.length || 0})
-                        </button>
-                        <button
-                          onClick={() => setActiveNoteTab("ai")}
-                          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                            activeNoteTab === "ai"
-                              ? "bg-[#1C1D22] text-white border border-white/[0.12]"
-                              : "text-[#8A8F98] hover:text-white"
-                          }`}
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" /> Ask Grounded AI
-                        </button>
-                      </div>
-
-                      {/* TAB 1: SUMMARY & TAKEAWAYS */}
-                      {activeNoteTab === "summary" && (
-                        <div className="space-y-4 pt-2">
-                          <div className="p-3.5 rounded-lg bg-[#121316] border border-white/[0.06] space-y-1.5">
-                            <span className="text-[11px] font-semibold text-[#8A8F98] uppercase tracking-wider block">
-                              Executive Concept Overview
-                            </span>
-                            <p className="text-xs text-[#ECEEF0] leading-relaxed">
-                              {activeNote.summary}
-                            </p>
+                    ) : (
+                      /* AI Message with Visual Extensions */
+                      <div className="bg-[#121316] border border-white/[0.08] rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between pb-1 border-b border-white/[0.04]">
+                          <div className="flex items-center gap-1.5 text-xs text-[#5E6AD2] font-semibold">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Grounded AI Companion</span>
                           </div>
+                          <span className="text-[10px] font-mono text-[#8A8F98]">{msg.timestamp}</span>
+                        </div>
 
-                          <div className="space-y-2">
-                            <span className="text-xs font-semibold text-white flex items-center gap-1.5">
-                              <FileCheck className="w-4 h-4 text-emerald-400" /> Must-Remember Key Formulas & Rules:
-                            </span>
+                        <p className="text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line">
+                          {msg.text}
+                        </p>
 
-                            <div className="space-y-2">
-                              {activeNote.keyTakeaways.map((takeaway, idx) => (
-                                <div
-                                  key={idx}
-                                  className="p-3 rounded-lg bg-[#121316] border border-white/[0.04] flex items-start gap-2.5 text-xs text-[#ECEEF0] leading-relaxed"
-                                >
-                                  <span className="text-xs font-mono font-bold text-[#5E6AD2] shrink-0 mt-0.5">
-                                    0{idx + 1}.
+                        {/* ============================================ */}
+                        {/* VISUAL EXTENSION 1: INTERACTIVE SCHEMA SPLIT */}
+                        {/* ============================================ */}
+                        {msg.visualType === "schema_split" && msg.schemaData && (
+                          <div className="p-3.5 rounded-lg bg-[#0A0B0D] border border-indigo-500/30 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                <Table className="w-3.5 h-3.5 text-[#5E6AD2]" /> Relational Split Visualizer
+                              </span>
+                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/15 text-rose-300 font-semibold">
+                                Lossy Dependency Warning
+                              </span>
+                            </div>
+
+                            {/* Parent Table */}
+                            <div className="p-2.5 rounded bg-[#14151C] border border-white/[0.06] space-y-1">
+                              <span className="text-[10px] font-mono text-[#8A8F98] block">Original Schema (3NF):</span>
+                              <p className="text-xs font-bold text-white">{msg.schemaData.originalTable.name}</p>
+                              <div className="flex flex-wrap gap-1 pt-1">
+                                {msg.schemaData.originalTable.cols.map((col, cIdx) => (
+                                  <span key={cIdx} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-white">
+                                    {col}
                                   </span>
-                                  <span>{takeaway}</span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Split indicator arrow */}
+                            <div className="flex items-center justify-center text-xs text-[#5E6AD2] font-mono font-bold">
+                              ↓ Decomposes into BCNF Tables ↓
+                            </div>
+
+                            {/* Child Decomposed Tables */}
+                            <div className="grid grid-cols-2 gap-2">
+                              {msg.schemaData.decomposedTables.map((child, chIdx) => (
+                                <div key={chIdx} className="p-2.5 rounded bg-[#121316] border border-emerald-500/30 space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-white">{child.name}</span>
+                                    <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 rounded">BCNF ✓</span>
+                                  </div>
+                                  <div className="space-y-0.5 text-[10px] font-mono text-[#8A8F98]">
+                                    {child.cols.map((c, i) => (
+                                      <div key={i} className="text-[#ECEEF0]">{c}</div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Lost Dependency Callout */}
+                            {msg.schemaData.lostDependency && (
+                              <div className="p-2 rounded bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-300 flex items-center gap-1.5">
+                                <XCircle className="w-3.5 h-3.5 shrink-0" />
+                                <span>{msg.schemaData.lostDependency}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ============================================ */}
+                        {/* VISUAL EXTENSION 2: INTERACTIVE STEPPER     */}
+                        {/* ============================================ */}
+                        {msg.visualType === "step_by_step" && msg.stepperData && (
+                          <div className="p-3.5 rounded-lg bg-[#0A0B0D] border border-indigo-500/30 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5 text-[#5E6AD2]" /> Step-by-Step Algorithm
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {[1, 2, 3].map((st) => (
+                                  <button
+                                    key={st}
+                                    onClick={() => setStepperStep(st)}
+                                    className={`w-5 h-5 rounded-full text-[10px] font-mono flex items-center justify-center ${
+                                      stepperStep === st
+                                        ? "bg-[#5E6AD2] text-white font-bold"
+                                        : "bg-white/[0.08] text-[#8A8F98]"
+                                    }`}
+                                  >
+                                    {st}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Active Step Card */}
+                            {(() => {
+                              const cur = msg.stepperData.steps[stepperStep - 1] || msg.stepperData.steps[0];
+                              return (
+                                <div className="p-3 rounded-lg bg-[#14151C] border border-white/[0.06] space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-white">
+                                      Step {cur.stepNumber}: {cur.title}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-[#8A8F98] leading-relaxed">
+                                    {cur.description}
+                                  </p>
+                                  <div className="p-2 rounded bg-black/40 border border-white/[0.04] font-mono text-[11px] text-emerald-300">
+                                    {cur.math}
+                                  </div>
+                                </div>
+                              );
+                            })()}
+
+                            <div className="flex items-center justify-between pt-1 text-xs">
+                              <button
+                                disabled={stepperStep <= 1}
+                                onClick={() => setStepperStep((prev) => Math.max(1, prev - 1))}
+                                className="text-[#8A8F98] hover:text-white disabled:opacity-30"
+                              >
+                                ← Prev Step
+                              </button>
+                              <button
+                                disabled={stepperStep >= 3}
+                                onClick={() => setStepperStep((prev) => Math.min(3, prev + 1))}
+                                className="text-[#5E6AD2] hover:underline font-bold disabled:opacity-30"
+                              >
+                                Next Step →
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ============================================ */}
+                        {/* VISUAL EXTENSION 3: FORMULA & PROOF CARD    */}
+                        {/* ============================================ */}
+                        {msg.visualType === "formula_card" && msg.formulaData && (
+                          <div className="p-3.5 rounded-lg bg-[#0A0B0D] border border-purple-500/30 space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-white">{msg.formulaData.formulaTitle}</span>
+                              <span className="text-[10px] font-mono text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded font-semibold">
+                                {msg.formulaData.examMarking}
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded bg-[#14151C] font-mono text-xs text-amber-300 border border-amber-500/20">
+                              {msg.formulaData.expression}
+                            </div>
+                            <div className="space-y-1 text-[11px] text-[#ECEEF0]">
+                              {msg.formulaData.proofLines.map((line, plIdx) => (
+                                <div key={plIdx} className="flex items-start gap-2">
+                                  <span className="text-purple-400 font-bold">•</span>
+                                  <span>{line}</span>
                                 </div>
                               ))}
                             </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* TAB 2: EXAM ANSWERS */}
-                      {activeNoteTab === "exam" && (
-                        <div className="space-y-3 pt-2">
-                          <span className="text-xs font-semibold text-[#8A8F98] uppercase tracking-wider block">
-                            Model Answers for BCREC Semester Papers:
-                          </span>
-
-                          <div className="space-y-3">
-                            {activeNote.examQuestions.map((eq, qIdx) => (
-                              <div
-                                key={qIdx}
-                                className="p-3.5 rounded-lg bg-[#121316] border border-white/[0.06] space-y-2"
+                        {/* Clickable Grounded Citations Drawer Trigger */}
+                        {msg.citations && (
+                          <div className="pt-2 border-t border-white/[0.04] flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] text-[#8A8F98] font-mono">Grounded In:</span>
+                            {msg.citations.map((cit, cIdx) => (
+                              <button
+                                key={cIdx}
+                                onClick={() => setActiveCitation(cit)}
+                                className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25 transition-colors flex items-center gap-1 cursor-pointer"
                               >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="flex items-start gap-2">
-                                    <span className="text-xs font-mono font-bold text-amber-400 mt-0.5">
-                                      Q{qIdx + 1}.
-                                    </span>
-                                    <p className="text-xs font-semibold text-white leading-snug">
-                                      {eq.question}
-                                    </p>
-                                  </div>
-                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0">
-                                    {eq.marks} Marks
-                                  </span>
-                                </div>
-
-                                <div className="p-3 rounded bg-[#0D0E10] border border-white/[0.04] text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line font-mono text-[11px]">
-                                  {eq.answer}
-                                </div>
-                              </div>
+                                <FileCheck className="w-3 h-3 text-emerald-400" />
+                                {cit.title} (p.{cit.page})
+                              </button>
                             ))}
                           </div>
-                        </div>
-                      )}
-
-                      {/* TAB 3: FLASHCARDS (ACTIVE RECALL) */}
-                      {activeNoteTab === "flashcards" && (
-                        <div className="space-y-4 pt-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[#8A8F98] uppercase tracking-wider block">
-                              Active Recall Deck ({activeNote.flashcards?.length || 0} Cards)
-                            </span>
-                            <span className="text-xs font-mono text-emerald-400 font-medium">
-                              {Object.values(masteredCards).filter(Boolean).length} / {activeNote.flashcards?.length || 0} Mastered
-                            </span>
-                          </div>
-
-                          {activeNote.flashcards && activeNote.flashcards.length > 0 ? (
-                            <div className="space-y-3">
-                              {activeNote.flashcards.map((card, cIdx) => {
-                                const isFlipped = !!flippedCards[cIdx];
-                                const isMastered = !!masteredCards[cIdx];
-
-                                return (
-                                  <div
-                                    key={cIdx}
-                                    className={`rounded-xl border transition-all p-4 relative cursor-pointer select-none ${
-                                      isFlipped
-                                        ? "bg-[#181A22] border-indigo-500/40 shadow-md"
-                                        : "bg-[#121316] border-white/[0.08] hover:border-white/[0.18]"
-                                    }`}
-                                    onClick={() =>
-                                      setFlippedCards((prev) => ({
-                                        ...prev,
-                                        [cIdx]: !prev[cIdx],
-                                      }))
-                                    }
-                                  >
-                                    <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.06] text-[10px] font-mono">
-                                      <span className="text-[#8A8F98] uppercase">
-                                        Card 0{cIdx + 1} · {isFlipped ? "Answer / Proof" : "Question / Prompt"}
-                                      </span>
-                                      <span className="text-[#5E6AD2] hover:underline flex items-center gap-1">
-                                        {isFlipped ? "Flip to Question ↺" : "Click to Reveal Answer ↷"}
-                                      </span>
-                                    </div>
-
-                                    {/* Card Content */}
-                                    {!isFlipped ? (
-                                      <div className="space-y-2 py-1">
-                                        <p className="text-xs font-semibold text-white leading-relaxed">
-                                          {card.front}
-                                        </p>
-                                        {card.hint && (
-                                          <p className="text-[10px] text-[#8A8F98] italic">
-                                            💡 Hint: {card.hint}
-                                          </p>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className="space-y-2 py-1">
-                                        <p className="text-xs text-[#ECEEF0] leading-relaxed whitespace-pre-line font-medium">
-                                          {card.back}
-                                        </p>
-                                      </div>
-                                    )}
-
-                                    {/* Action buttons on flip */}
-                                    {isFlipped && (
-                                      <div
-                                        className="pt-3 mt-3 border-t border-white/[0.06] flex items-center justify-between"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <span className="text-[11px] text-[#8A8F98]">How was your recall?</span>
-                                        <div className="flex items-center gap-2">
-                                          <button
-                                            onClick={() =>
-                                              setMasteredCards((prev) => ({
-                                                ...prev,
-                                                [cIdx]: false,
-                                              }))
-                                            }
-                                            className="px-2.5 py-1 text-[11px] rounded bg-white/[0.06] hover:bg-white/[0.1] text-[#ECEEF0] transition-colors"
-                                          >
-                                            Review Again
-                                          </button>
-                                          <button
-                                            onClick={() =>
-                                              setMasteredCards((prev) => ({
-                                                ...prev,
-                                                [cIdx]: true,
-                                              }))
-                                            }
-                                            className={`px-2.5 py-1 text-[11px] rounded font-medium transition-colors ${
-                                              isMastered
-                                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                                                : "bg-[#5E6AD2] text-white hover:bg-[#5E6AD2]/90"
-                                            }`}
-                                          >
-                                            {isMastered ? "Mastered ✓" : "Got It Right ✓"}
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="p-8 text-center bg-[#121316] rounded-xl border border-white/[0.06] space-y-2">
-                              <Layers className="w-8 h-8 text-[#8A8F98] mx-auto" />
-                              <p className="text-xs font-semibold text-white">
-                                Flashcards are being compiled for this module
-                              </p>
-                              <p className="text-[11px] text-[#8A8F98]">
-                                Try opening Unit 3 (Normalization Slides) for an active recall deck.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* TAB 4: AI DOUBT COMPANION */}
-                      {activeNoteTab === "ai" && (
-                        <div className="space-y-3 pt-2">
-                          {/* Preset Doubts */}
-                          <div className="space-y-1.5">
-                            <span className="text-[11px] font-semibold text-[#8A8F98] uppercase tracking-wider block">
-                              Instant Explanations:
-                            </span>
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                onClick={() =>
-                                  handleSendAiDoubt(
-                                    `Explain the core concept in "${activeNote.title}" using a real-world analogy.`
-                                  )
-                                }
-                                className="text-[11px] px-2.5 py-1 rounded bg-[#121316] border border-white/[0.08] hover:border-white/[0.2] text-[#ECEEF0] transition-colors"
-                              >
-                                💡 Explain with Real-World Analogy
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleSendAiDoubt(
-                                    `What are the most repeated 5-mark exam questions from this note?`
-                                  )
-                                }
-                                className="text-[11px] px-2.5 py-1 rounded bg-[#121316] border border-white/[0.08] hover:border-white/[0.2] text-[#ECEEF0] transition-colors"
-                              >
-                                🎯 Expected 5-Mark Questions
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Messages */}
-                          <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
-                            {aiAnswers.map((item, aIdx) => (
-                              <div key={aIdx} className="space-y-1.5">
-                                <div className="text-right">
-                                  <span className="inline-block bg-[#1C1D22] text-xs text-white px-3 py-1.5 rounded-lg border border-white/[0.08]">
-                                    {item.query}
-                                  </span>
-                                </div>
-                                <div className="p-3 rounded-lg bg-[#121316] border border-white/[0.06] text-xs text-[#ECEEF0] whitespace-pre-line leading-relaxed">
-                                  {item.reply}
-                                </div>
-                              </div>
-                            ))}
-
-                            {isAiLoading && (
-                              <div className="p-2.5 text-xs text-[#8A8F98] italic flex items-center gap-2">
-                                <Sparkles className="w-3.5 h-3.5 text-[#5E6AD2] animate-spin" />
-                                Analyzing professor slides for exact citations...
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* AI Prompt Input Bar (only active in AI tab or bottom) */}
-                    {activeNoteTab === "ai" && (
-                      <div className="pt-3 border-t border-white/[0.06]">
-                        <div className="flex items-center gap-2 bg-[#121316] border border-white/[0.1] rounded-lg p-2 focus-within:border-[#5E6AD2] transition-colors">
-                          <input
-                            type="text"
-                            placeholder="Ask any doubt regarding this specific note..."
-                            value={aiQuery}
-                            onChange={(e) => setAiQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === "Enter" && handleSendAiDoubt()}
-                            className="flex-1 bg-transparent text-xs text-white placeholder-[#6E7480] px-2 py-1 outline-none"
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => handleSendAiDoubt()}
-                            disabled={!aiQuery.trim()}
-                            icon={<Send className="w-3 h-3" />}
-                          >
-                            Ask
-                          </Button>
-                        </div>
+                        )}
                       </div>
                     )}
-                  </Card>
-                ) : (
-                  <Card className="p-8 text-center bg-[#0D0E10] border-white/[0.08] space-y-2">
-                    <BookOpen className="w-8 h-8 text-[#8A8F98] mx-auto" />
-                    <p className="text-sm font-semibold text-white">Select a note from the left index</p>
-                    <p className="text-xs text-[#8A8F98]">
-                      Choose any lecture slide or formula sheet to read takeaways and 5-mark model answers.
-                    </p>
-                  </Card>
+                  </div>
+                ))}
+
+                {isTyping && (
+                  <div className="flex items-center gap-2 p-2 text-xs text-[#8A8F98] italic">
+                    <Sparkles className="w-3.5 h-3.5 text-[#5E6AD2] animate-spin" />
+                    <span>Cross-verifying with {selectedCount} syllabus sources...</span>
+                  </div>
                 )}
               </div>
+
+              {/* Chat Input Field */}
+              <div className="pt-3 border-t border-white/[0.06] mt-2">
+                <div className="flex items-center gap-2 bg-[#121316] border border-white/[0.1] rounded-xl p-2 focus-within:border-[#5E6AD2] transition-colors">
+                  <input
+                    type="text"
+                    placeholder="Ask any question grounded on your selected notes..."
+                    value={inputPrompt}
+                    onChange={(e) => setInputPrompt(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendPrompt()}
+                    className="flex-1 bg-transparent text-xs text-white placeholder-[#6E7480] px-2 outline-none"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => handleSendPrompt()}
+                    disabled={!inputPrompt.trim()}
+                    className="bg-[#5E6AD2]"
+                    icon={<Send className="w-3 h-3" />}
+                  >
+                    Ask
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* ====================================================== */}
+          {/* RIGHT COLUMN: NOTEBOOKLM STUDIO TOOLS (4 Cols)         */}
+          {/* ====================================================== */}
+          <div className="lg:col-span-4 space-y-4">
+            {/* Tool Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-[#0D0E10] border border-white/[0.08] rounded-xl">
+              <button
+                onClick={() => setStudioTool("audio")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  studioTool === "audio"
+                    ? "bg-[#1C1D22] text-white border border-white/[0.1]"
+                    : "text-[#8A8F98] hover:text-white"
+                }`}
+              >
+                <Volume2 className="w-3.5 h-3.5 text-amber-400" /> Audio
+              </button>
+              <button
+                onClick={() => setStudioTool("flashcards")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  studioTool === "flashcards"
+                    ? "bg-[#1C1D22] text-white border border-white/[0.1]"
+                    : "text-[#8A8F98] hover:text-white"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" /> Cards
+              </button>
+              <button
+                onClick={() => setStudioTool("cheat_sheet")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  studioTool === "cheat_sheet"
+                    ? "bg-[#1C1D22] text-white border border-white/[0.1]"
+                    : "text-[#8A8F98] hover:text-white"
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5 text-sky-400" /> Cheat Sheet
+              </button>
+              <button
+                onClick={() => setStudioTool("quiz")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-1 ${
+                  studioTool === "quiz"
+                    ? "bg-[#1C1D22] text-white border border-white/[0.1]"
+                    : "text-[#8A8F98] hover:text-white"
+                }`}
+              >
+                <Award className="w-3.5 h-3.5 text-emerald-400" /> Quiz
+              </button>
             </div>
+
+            {/* TOOL 1: AUDIO OVERVIEW PODCAST PLAYER */}
+            {studioTool === "audio" && (
+              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-amber-500/15 text-amber-300">
+                      <Volume2 className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h3 className="text-xs font-bold text-white">NotebookLM Audio Overview</h3>
+                      <p className="text-[10px] text-[#8A8F98]">Generated 2-Host Study Discussion</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded font-semibold">
+                    4m 12s
+                  </span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#121316] border border-white/[0.06] space-y-2.5">
+                  <span className="text-xs font-semibold text-white block">
+                    Episode: "Why BCNF breaks Dependency Preservation (and how to answer on exam)"
+                  </span>
+
+                  {/* Audio Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-400 to-[#e6ba7e] transition-all"
+                        style={{ width: `${audioProgress}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-[#8A8F98]">
+                      <span>
+                        {String(Math.floor((audioProgress / 100 * 252) / 60)).padStart(2, "0")}:
+                        {String(Math.floor((audioProgress / 100 * 252) % 60)).padStart(2, "0")}
+                      </span>
+                      <span>04:12</span>
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex items-center justify-center gap-3 pt-1">
+                    <button
+                      onClick={() => setAudioPlaying(!audioPlaying)}
+                      className="w-10 h-10 rounded-full bg-amber-400 hover:bg-amber-300 text-black flex items-center justify-center transition-colors shadow-md"
+                    >
+                      {audioPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Audio Snippet Transcript */}
+                <div className="p-3 rounded-lg bg-[#121316] border border-white/[0.04] space-y-1 text-xs text-[#ECEEF0]">
+                  <span className="text-[10px] font-mono text-[#8A8F98] uppercase block">Preview Transcript:</span>
+                  <p className="italic text-[11px] text-[#9d9b97]">
+                    "Host 1: So Ananya, the professor always asks this in Group B. Why can't BCNF just preserve dependencies like 3NF? Host 2: Exactly! Because BCNF is uncompromising: every determinant MUST be a superkey..."
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* TOOL 2: INTERACTIVE FLASHCARDS */}
+            {studioTool === "flashcards" && (
+              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    Active Recall Deck
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    {Object.values(masteredCards).filter(Boolean).length} / {PRESET_FLASHCARDS.length} Mastered
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {PRESET_FLASHCARDS.map((card, idx) => {
+                    const isFlipped = !!flippedCards[card.id];
+                    const isMastered = !!masteredCards[card.id];
+
+                    return (
+                      <div
+                        key={card.id}
+                        onClick={() =>
+                          setFlippedCards((prev) => ({ ...prev, [card.id]: !prev[card.id] }))
+                        }
+                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          isFlipped
+                            ? "bg-[#181A22] border-indigo-500/40"
+                            : "bg-[#121316] border-white/[0.06] hover:border-white/[0.14]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between pb-1 border-b border-white/[0.04] text-[10px] font-mono text-[#8A8F98]">
+                          <span>Card 0{idx + 1}</span>
+                          <span className="text-[#5E6AD2]">{isFlipped ? "Answer ↷" : "Click to Flip ↺"}</span>
+                        </div>
+
+                        {!isFlipped ? (
+                          <p className="text-xs font-semibold text-white pt-1">{card.question}</p>
+                        ) : (
+                          <div className="space-y-1 pt-1">
+                            <p className="text-xs text-[#ECEEF0] leading-relaxed">{card.answer}</p>
+                            <div className="pt-2 flex justify-end">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMasteredCards((prev) => ({ ...prev, [card.id]: !prev[card.id] }));
+                                }}
+                                className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                                  isMastered
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : "bg-white/[0.08] text-white"
+                                }`}
+                              >
+                                {isMastered ? "Mastered ✓" : "Mark Mastered"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
+
+            {/* TOOL 3: 1-PAGE EXAM CHEAT SHEET */}
+            {studioTool === "cheat_sheet" && (
+              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    1-Page Exam Cheat Sheet
+                  </span>
+                  <Button size="sm" variant="secondary" icon={<Download className="w-3 h-3" />}>
+                    Save PDF
+                  </Button>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[#121316] border border-white/[0.06] space-y-2 text-xs">
+                  <span className="font-bold text-white block">Normal Forms Quick Reference:</span>
+                  <div className="space-y-1 font-mono text-[11px] text-[#ECEEF0]">
+                    <div>• 1NF: Atomic attribute values only.</div>
+                    <div>• 2NF: 1NF + No partial dependencies on candidate keys.</div>
+                    <div>• 3NF: 2NF + For X → Y, either X is superkey OR Y is prime.</div>
+                    <div>• BCNF: For every X → Y, X MUST be superkey (no prime exception).</div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[#121316] border border-white/[0.06] space-y-1 text-xs">
+                  <span className="font-bold text-white block">Lossless-Join Theorem:</span>
+                  <p className="font-mono text-[11px] text-amber-300">
+                    Decomposition into R1 and R2 is lossless if (R1 ∩ R2) → (R1 - R2) OR (R1 ∩ R2) → (R2 - R1).
+                  </p>
+                </div>
+              </Card>
+            )}
+
+            {/* TOOL 4: CHECKPOINT QUIZ */}
+            {studioTool === "quiz" && (
+              <Card className="p-4 bg-[#0D0E10] border-white/[0.08] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">
+                    5-Question Checkpoint
+                  </span>
+                  <span className="text-[10px] font-mono text-emerald-400">Target: ≥70%</span>
+                </div>
+
+                <div className="p-3 rounded-lg bg-[#121316] border border-white/[0.06] space-y-2 text-xs">
+                  <p className="font-semibold text-white">Q1. Which normal form guarantees dependency preservation?</p>
+                  <div className="space-y-1">
+                    {["1NF", "2NF", "3NF", "BCNF"].map((opt, i) => (
+                      <div
+                        key={i}
+                        className={`p-1.5 rounded text-xs border ${
+                          i === 2
+                            ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                            : "bg-[#0A0B0D] border-white/[0.04] text-[#8A8F98]"
+                        }`}
+                      >
+                        {opt} {i === 2 && "✓ (Correct)"}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Link href="/study/quizzes" className="block pt-1">
+                  <Button size="sm" variant="primary" className="w-full bg-[#5E6AD2]">
+                    Open Full Quiz Bank
+                  </Button>
+                </Link>
+              </Card>
+            )}
+          </div>
+        </div>
+
+        {/* ======================================================== */}
+        {/* CITATION SIDE DRAWER (Opens when citation is clicked)    */}
+        {/* ======================================================== */}
+        {activeCitation && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-5 bg-[#121316] border-indigo-500/40 space-y-3 shadow-2xl">
+              <div className="flex items-center justify-between pb-2 border-b border-white/[0.08]">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">Verified Grounded Source</span>
+                </div>
+                <button
+                  onClick={() => setActiveCitation(null)}
+                  className="text-xs text-[#8A8F98] hover:text-white px-2 py-0.5 rounded bg-white/[0.06]"
+                >
+                  Close ✕
+                </button>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-bold text-white">{activeCitation.title}</h3>
+                <span className="text-[11px] font-mono text-[#5E6AD2]">Page {activeCitation.page} · Prof. Samanta Lecture Archive</span>
+              </div>
+
+              <div className="p-3.5 rounded-lg bg-[#0A0B0D] border border-white/[0.06] text-xs text-[#ECEEF0] leading-relaxed italic">
+                "{activeCitation.snippet}"
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Button size="sm" variant="secondary" onClick={() => setActiveCitation(null)}>
+                  Got It
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* UPLOAD EXTRA SOURCE MODAL                                */}
+        {/* ======================================================== */}
+        {showUploadModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <Card className="max-w-md w-full p-5 bg-[#121316] border-white/[0.12] space-y-4 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-[#5E6AD2]" />
+                  <h3 className="text-sm font-bold text-white">Upload Extra Student Notes</h3>
+                </div>
+                <button onClick={() => setShowUploadModal(false)} className="text-[#8A8F98] hover:text-white">
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-[#8A8F98]">
+                Add your own handwritten notes, PDFs, or lecture recordings. NotebookLM will index them and ground all answers on them.
+              </p>
+
+              <div>
+                <label className="text-[11px] text-[#8A8F98] block mb-1">Source Title / Note Name:</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Unit 3 Handwritten Formula Summary.pdf"
+                  value={newSourceTitle}
+                  onChange={(e) => setNewSourceTitle(e.target.value)}
+                  className="w-full bg-[#0D0E10] border border-white/[0.1] rounded-lg p-2 text-xs text-white outline-none focus:border-[#5E6AD2]"
+                />
+              </div>
+
+              <div className="border-2 border-dashed border-white/[0.1] rounded-xl p-6 text-center space-y-2 bg-[#0A0B0D]">
+                <Paperclip className="w-6 h-6 text-[#5E6AD2] mx-auto" />
+                <p className="text-xs font-semibold text-white">Drag & drop your PDF or image here</p>
+                <p className="text-[10px] text-[#8A8F98]">Supports PDF, DOCX, PNG (Max 50 MB)</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+                <Button size="sm" variant="secondary" onClick={() => setShowUploadModal(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="primary" onClick={handleAddSource} disabled={!newSourceTitle.trim()}>
+                  Add to Study Studio
+                </Button>
+              </div>
+            </Card>
           </div>
         )}
       </div>
