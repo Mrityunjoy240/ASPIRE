@@ -6,6 +6,10 @@
 **Date:** 03 October 2026
 **Version:** 1.0
 
+> [!WARNING]
+> **STALE STATUSES — SUPERSEDED FOR ORDERING BY `docs/11_ROADMAP.md` (11 Oct 2026, Phase-0 reconciliation, ADR-003).**
+> The READY/DONE/BLOCKED markings below predate the tech-selection reset and the 26-commit implementation on `feature/vertical-slice-case-approval` (auth, migrations 001–013, engines, case vertical slices, CI). Most Phase 0–6 tasks marked BLOCKED/READY here are already substantially built. **Do not execute this queue as-is.** Historical prompts are preserved for reference; the authoritative build order, effort/risk estimates, and acceptance criteria now live in `docs/11_ROADMAP.md` (pending team-lead ratification). Architecture baseline: `docs/decisions/ADR-003_CORE_PLATFORM_RECONCILIATION.md`.
+
 ---
 
 > [!IMPORTANT]
@@ -45,7 +49,7 @@
 ---
 
 ### T-000 — Next.js Monorepo Scaffold
-**Status:** 🔒 BLOCKED — Pre-Coding Gate (AGENTS.md §1): no spec is 🟢 FROZEN, and there is no gate exception (Team Lead decision)
+**Status:** ✅ DONE
 **PRD Ref:** P0-12, P0-15
 **Spec Ref:** CONSTITUTION E-07
 **Branch:** `feature/T-000-project-scaffold`
@@ -67,11 +71,11 @@
 ```
 
 **Acceptance Criteria:**
-- [ ] `npm run build` passes in apps/web with zero errors
-- [ ] TypeScript strict mode enabled
-- [ ] Tailwind CSS working (renders a test div with bg-blue-500)
-- [ ] No secrets in any committed file (Constitution S-05)
-- [ ] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus the frozen Supabase env contract: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URI` (legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` names are NOT used; no `SUPABASE_SECRET_KEY` without a concrete privileged requirement)
+- [x] `npm run build` passes in apps/web with zero errors
+- [x] TypeScript strict mode enabled
+- [x] Tailwind CSS working (renders a test div with bg-blue-500)
+- [x] No secrets in any committed file (Constitution S-05)
+- [x] `.env.example` documents: `DATABASE_URL`, `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, `EMBEDDING_MODEL`, plus the frozen Supabase env contract: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URI` (legacy `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` names are NOT used; no `SUPABASE_SECRET_KEY` without a concrete privileged requirement)
 
 **OpenCode Prompt:**
 ```
@@ -99,7 +103,7 @@ Verify: 'npm run build' must pass with zero TypeScript errors.
 ---
 
 ### T-001 — CI Pipeline (GitHub Actions)
-**Status:** 🔒 BLOCKED on T-000
+**Status:** ⬜ READY
 **PRD Ref:** P0-16
 **Spec Ref:** CONSTITUTION E-07
 **Branch:** `feature/T-001-ci-pipeline`
@@ -143,7 +147,7 @@ Do NOT add any test runner yet — leave a placeholder 'npm run test' that exits
 ---
 
 ### T-002 — Database Setup (PostgreSQL + SQLAlchemy + pgvector)
-**Status:** 🔒 BLOCKED on T-000
+**Status:** ⬜ READY
 **PRD Ref:** P0-11, P0-13
 **Spec Ref:** 05_DATA_API_CONTRACTS.md — all tables
 **Branch:** `feature/T-002-database`
@@ -1536,7 +1540,7 @@ The supervisor agent does the following when triggered by a risk event:
    {
      decision: string,
      reason_codes: string[],    // e.g. ["LOW_ATTENDANCE", "EXAM_APPROACHING"]
-     evidence: string[],        // e.g. ["attendance 73%", "threshold 75%", "exam in 8 days"]
+     evidence: string[],        // e.g. ["attendance 73%", "threshold 75%", "exam in 8 days"] — LLM parse format only; persisted as canonical evidence entries (05_DATA_API_CONTRACTS, DEC-01)
      actions: [
        { type: string, subject?: string, target_classes?: number, topic?: string, duration_min?: number, source?: string }
      ],

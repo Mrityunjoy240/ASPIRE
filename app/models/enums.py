@@ -1,0 +1,110 @@
+# app/models/enums.py
+# PostgreSQL enum types as Python enums (for type safety in models)
+
+import enum
+
+
+class UserRole(str, enum.Enum):
+    STUDENT = "STUDENT"
+    FACULTY = "FACULTY"
+    CLASS_TEACHER = "CLASS_TEACHER"
+    MENTOR = "MENTOR"
+    HOD = "HOD"
+    ADMIN = "ADMIN"
+
+
+class AttendanceStatus(str, enum.Enum):
+    PRESENT = "PRESENT"
+    ABSENT = "ABSENT"
+    LATE = "LATE"  # Reserved/unsupported in v1 (DM-NEW-LATE01)
+    CANCELLED = "CANCELLED"
+
+
+class AssessmentComponentType(str, enum.Enum):
+    CIA = "CIA"
+    CIA_1 = "CIA-1"
+    CIA_2 = "CIA-2"
+    PCIA = "PCIA"
+    ESE = "ESE"
+    PESE = "PESE"
+    LAB = "LAB"
+    ASSIGNMENT = "ASSIGNMENT"
+    CLASS_TEST = "CLASS_TEST"
+    ATTENDANCE = "ATTENDANCE"
+    QUIZ = "QUIZ"
+    PROJECT = "PROJECT"
+    VIVA = "VIVA"
+
+
+class AssessmentSubmissionStatus(str, enum.Enum):
+    NOT_SUBMITTED = "NOT_SUBMITTED"
+    SUBMITTED_PENDING_EVALUATION = "SUBMITTED_PENDING_EVALUATION"
+    GRADED = "GRADED"
+    OFFICIAL_ZERO = "OFFICIAL_ZERO"
+    WITHHELD = "WITHHELD"
+    CANCELLED = "CANCELLED"
+
+
+class TaskSourceType(str, enum.Enum):
+    CALENDAR = "CALENDAR"
+    ASSESSMENT = "ASSESSMENT"
+    AI_PLAN = "AI_PLAN"
+    MENTOR = "MENTOR"
+
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    SNOOZED = "SNOOZED"
+
+
+class InterventionCaseStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    IN_REVIEW = "IN_REVIEW"
+    PLAN_PROPOSED = "PLAN_PROPOSED"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    ACTIVE = "ACTIVE"
+    MONITORING = "MONITORING"
+    REPLAN_REQUIRED = "REPLAN_REQUIRED"
+    ESCALATION_REQUIRED = "ESCALATION_REQUIRED"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
+
+
+class FollowUpTriggerType(str, enum.Enum):
+    """06 §4 follow-up trigger policies + 02 §2.1 Step 6 mentor custom date."""
+
+    ATTENDANCE_INTERVENTION = "ATTENDANCE_INTERVENTION"
+    STUDY_INTERVENTION = "STUDY_INTERVENTION"
+    ASSIGNMENT_INTERVENTION = "ASSIGNMENT_INTERVENTION"
+    CUSTOM_DATE = "CUSTOM_DATE"
+
+
+class FollowUpStatus(str, enum.Enum):
+    """ADR-004 §2.3 lifecycle: SCHEDULED → FULFILLED → EVALUATED, or
+    SCHEDULED → CANCELLED when superseded (Option B, ADR-004 §2.1 — see
+    the consumption rule: only one follow-up drives a case cycle)."""
+
+    SCHEDULED = "SCHEDULED"
+    FULFILLED = "FULFILLED"
+    EVALUATED = "EVALUATED"
+    CANCELLED = "CANCELLED"
+
+
+class RecordStatus(str, enum.Enum):
+    VERIFIED = "VERIFIED"
+    PROVISIONAL = "PROVISIONAL"
+    CONFLICT = "CONFLICT"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class ActorType(str, enum.Enum):
+    USER = "USER"
+    SYSTEM_AGENT = "SYSTEM_AGENT"
+
+
+class SourceSystem(str, enum.Enum):
+    CSV_IMPORT = "CSV_IMPORT"
+    MENTOR_WEB = "MENTOR_WEB"
+    RULE_ENGINE = "RULE_ENGINE"
+    AGENT = "AGENT"

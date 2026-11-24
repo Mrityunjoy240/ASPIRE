@@ -1,0 +1,247 @@
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+@theme {
+  /* ========================================================
+     ASPIRE Design System — Linear Precision Palette
+     Directly adapted from Linear's aesthetic & token hierarchy
+     ======================================================== */
+
+  /* ---- Pure Linear Canvas & Neutral Surfaces ---- */
+  --color-bg-canvas: #08090A;
+  --color-bg-surface-1: #121316;
+  --color-bg-surface-2: #16171A;
+  --color-bg-surface-hover: #1C1D22;
+  --color-bg-surface-elevated: rgba(22, 23, 26, 0.90);
+
+  /* ---- Hairline Borders & Dividers ---- */
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-hairline: rgba(255, 255, 255, 0.12);
+  --color-border-highlight: rgba(255, 255, 255, 0.20);
+
+  /* ---- Linear Typography Ink (High Contrast) ---- */
+  --color-text-primary: #FFFFFF;
+  --color-text-body: #ECEEF0;
+  --color-text-muted: #9DA3AE;
+  --color-text-tertiary: #6E7480;
+
+  /* ---- Linear Brand & Accent Colors ---- */
+  --color-linear-accent: #5E6AD2;
+  --color-linear-accent-hover: #6875E3;
+  --color-linear-accent-bg: rgba(94, 106, 210, 0.14);
+  --color-linear-accent-border: rgba(94, 106, 210, 0.35);
+
+  /* ---- Academic Semantic Signals (High Visibility) ---- */
+  --color-critical: #FB7185;
+  --color-critical-bg: rgba(244, 63, 94, 0.12);
+  --color-critical-border: rgba(244, 63, 94, 0.30);
+
+  --color-warning: #FBBF24;
+  --color-warning-bg: rgba(245, 158, 11, 0.12);
+  --color-warning-border: rgba(245, 158, 11, 0.30);
+
+  --color-safe: #34D399;
+  --color-safe-bg: rgba(16, 185, 129, 0.12);
+  --color-safe-border: rgba(16, 185, 129, 0.30);
+
+  --color-sky: #38BDF8;
+  --color-sky-bg: rgba(56, 189, 248, 0.12);
+  --color-sky-border: rgba(56, 189, 248, 0.30);
+
+  /* ---- Typography Stacks ---- */
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-display);
+    background-color: #08090A;
+    color: #ECEEF0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    letter-spacing: -0.015em;
+  }
+
+  body {
+    min-height: 100vh;
+    background-color: #08090A;
+    color: #ECEEF0;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: -0.03em;
+    color: #FFFFFF;
+  }
+
+  code, kbd, samp, pre {
+    font-family: var(--font-mono);
+    letter-spacing: -0.01em;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #08090A;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+  }
+}
+
+@layer utilities {
+  /* Page Entrance Animation */
+  .page-enter {
+    animation: linearPageEnter 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes linearPageEnter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Linear-style Surface Panels with high visibility */
+  .linear-card {
+    background-color: #121316;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .linear-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background-color: #141519;
+  }
+
+  /* Linear-style Primary White Button — Compact Medium */
+  .btn-linear-primary {
+    background-color: #FFFFFF;
+    color: #08090A;
+    font-weight: 500;
+    font-size: 13px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    transition: opacity 120ms ease, transform 120ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn-linear-primary:hover {
+    opacity: 0.92;
+  }
+
+  .btn-linear-primary:active {
+    transform: scale(0.98);
+  }
+
+  /* Linear-style Secondary Dark Button — Compact Medium */
+  .btn-linear-secondary {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #ECEEF0;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    font-weight: 500;
+    font-size: 13px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn-linear-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: #FFFFFF;
+  }
+
+  .btn-linear-secondary:active {
+    transform: scale(0.98);
+  }
+
+  /* Linear-style Blurple Accent Button — Compact Medium */
+  .btn-linear-accent {
+    background-color: #5E6AD2;
+    color: #FFFFFF;
+    font-weight: 500;
+    font-size: 13px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 6px;
+    transition: background-color 120ms ease, transform 120ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .btn-linear-accent:hover {
+    background-color: #6875E3;
+  }
+
+  .btn-linear-accent:active {
+    transform: scale(0.98);
+  }
+
+  /* Micro Pills */
+  .linear-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    border: 1px solid transparent;
+  }
+
+  /* Subtle pulsing dot */
+  .linear-pulse-dot {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .linear-pulse-dot::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    background-color: currentColor;
+    opacity: 0.6;
+    animation: linearDotPing 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes linearDotPing {
+    75%, 100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+}
