@@ -6,22 +6,14 @@ import { StudentLayout } from "@/components/layout/StudentLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
-  BookOpen,
   Sparkles,
   ArrowRight,
   Clock,
-  Calendar,
   FileText,
-  Upload,
-  User,
-  GraduationCap,
-  Layers,
-  CheckCircle2,
   AlertCircle,
-  ExternalLink,
 } from "lucide-react";
 
-import { CLASSROOM_COURSES, type ClassroomCourse } from "./classroom-data";
+import { CLASSROOM_COURSES } from "./classroom-data";
 
 export default function ClassroomDirectoryPage() {
   return (

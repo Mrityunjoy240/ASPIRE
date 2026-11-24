@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { StudentLayout } from "@/components/layout/StudentLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,28 +10,20 @@ import {
   Sparkles,
   Send,
   Upload,
-  CheckCircle2,
   XCircle,
   FileText,
   Layers,
   ArrowRight,
-  RefreshCw,
   Play,
   Pause,
   Download,
   Award,
-  Clock,
-  HelpCircle,
   ChevronLeft,
-  ChevronRight,
-  ExternalLink,
   Plus,
-  Trash2,
   Paperclip,
   Volume2,
   FileCheck,
   Table,
-  SlidersHorizontal,
 } from "lucide-react";
 
 // ==========================================
@@ -157,9 +148,6 @@ const PRESET_FLASHCARDS: Flashcard[] = [
 ];
 
 export default function NotebookLMStudyRoomPage() {
-  const searchParams = useSearchParams();
-  const subjectParam = searchParams.get("subject") || "cs501";
-
   // Sources State (Left Column)
   const [sources, setSources] = useState<SourceDoc[]>(INITIAL_SOURCES);
   const [showUploadModal, setShowUploadModal] = useState(false);

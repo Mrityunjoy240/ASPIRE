@@ -16,9 +16,6 @@ import {
   FileText,
   School,
   Upload,
-  Calendar,
-  Layers,
-  Award,
 } from "lucide-react";
 
 interface SubjectDesk {

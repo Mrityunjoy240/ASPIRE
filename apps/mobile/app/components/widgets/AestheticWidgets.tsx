@@ -9,9 +9,6 @@ import {
   Flame,
   Calendar,
   Sparkles,
-  Quote,
-  Coffee,
-  CheckCircle2,
   Clock,
 } from "lucide-react";
 

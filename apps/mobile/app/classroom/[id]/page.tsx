@@ -9,21 +9,14 @@ import { Button } from "@/components/ui/Button";
 import {
   BookOpen,
   Sparkles,
-  ArrowRight,
   Clock,
-  Calendar,
   FileText,
   Upload,
-  User,
-  GraduationCap,
-  Layers,
   CheckCircle2,
-  AlertCircle,
   ExternalLink,
   ChevronLeft,
   MessageSquare,
   Paperclip,
-  Send,
   Download,
 } from "lucide-react";
 import { CLASSROOM_COURSES } from "../classroom-data";
